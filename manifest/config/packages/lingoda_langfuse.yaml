@@ -1,0 +1,40 @@
+# Configure Langfuse integration
+lingoda_langfuse:
+    connection:
+        public_key: '%env(LANGFUSE_PUBLIC_KEY)%'
+        secret_key: '%env(LANGFUSE_SECRET_KEY)%'
+        host: '%env(default:default_langfuse_host:LANGFUSE_HOST)%'
+        timeout: 30
+        retry:
+            max_attempts: 3
+            delay: 1000
+
+    tracing:
+        enabled: true
+        sampling_rate: 1.0
+        # Async flushing requires symfony/messenger
+#        async_flush:
+#            enabled: false
+#            message_bus: 'messenger.bus.default'
+
+    prompts:
+        # Caching disabled by default (uncomment to enable)
+#        caching:
+#            enabled: true
+#            ttl: 3600
+#            service: 'cache.app'
+
+        # Fallback storage disabled by default (uncomment to enable)
+#        fallback:
+#            enabled: true
+#            storage:
+#                path: '%kernel.project_dir%/var/prompts'
+#                OR for cloud storage (requires league/flysystem):
+#                service: 'your.flysystem.service'
+
+# Web profiler integration (auto-enabled if symfony/web-profiler-bundle is installed)
+# profiler:
+#     enabled: true
+
+parameters:
+    default_langfuse_host: 'https://cloud.langfuse.com'

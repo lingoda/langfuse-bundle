@@ -1,0 +1,35 @@
+{
+    "bundles": {
+        "Lingoda\\LangfuseBundle\\LingodaLangfuseBundle": ["all"]
+    },
+    "copy-from-recipe": {
+        "config/": "%CONFIG_DIR%/"
+    },
+    "env": {
+        "#1": "###> lingoda/langfuse-bundle ###",
+        "#2": "# Langfuse API configuration",
+        "LANGFUSE_PUBLIC_KEY": "",
+        "LANGFUSE_SECRET_KEY": "",
+        "LANGFUSE_HOST": "https://cloud.langfuse.com",
+        "#3": "###< lingoda/langfuse-bundle ###"
+    },
+    "post-install-output": [
+        "",
+        "<bg=blue;fg=white>              </> <info>Lingoda Langfuse Bundle installed!</info>",
+        "",
+        "  <comment>Next steps:</comment>",
+        "  1. <comment>Add your Langfuse API keys to <info>.env</info></comment>",
+        "  2. <comment>Configuration file created: <info>config/packages/lingoda_langfuse.yaml</info></comment>",
+        "",
+        "  <comment>Optional features (install if needed):</comment>",
+        "  • <comment>Async tracing: <info>composer require symfony/messenger</info></comment>",
+        "  • <comment>Cloud storage: <info>composer require league/flysystem</info></comment>",
+        "  • <comment>Debug toolbar: <info>composer require --dev symfony/web-profiler-bundle</info></comment>",
+        "",
+        "  <comment>Test your setup:</comment>",
+        "  • <comment>Test connection: <info>php bin/console langfuse:test-connection</info></comment>",
+        "",
+        "  Documentation: <comment>See README.md for full configuration options</comment>",
+        ""
+    ]
+}

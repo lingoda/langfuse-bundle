@@ -1,0 +1,63 @@
+{
+    "name": "lingoda/langfuse-bundle",
+    "description": "Symfony bundle for Langfuse integration with automatic AI tracing",
+    "type": "symfony-bundle",
+    "license": "proprietary",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "require": {
+        "php": "^8.3",
+        "dropsolid/langfuse-php-sdk": "^1.2",
+        "lingoda/ai-bundle": "^1.2",
+        "psr/log": "^3.0",
+        "symfony/cache": "^6.4|^7.0",
+        "symfony/clock": "^6.4|^7.0",
+        "symfony/config": "^6.4|^7.0",
+        "symfony/console": "^6.4|^7.0",
+        "symfony/dependency-injection": "^6.4|^7.0",
+        "symfony/expression-language": "^6.4|^7.0",
+        "symfony/http-client": "^6.4|^7.0",
+        "symfony/http-foundation": "^6.4|^7.0",
+        "symfony/http-kernel": "^6.4|^7.0",
+        "webmozart/assert": "^1.11"
+    },
+    "suggest": {
+        "symfony/messenger": "Required for async trace processing",
+        "league/flysystem": "Required for cloud storage integration (S3, GCS, etc.)"
+    },
+    "require-dev": {
+        "dg/bypass-finals": "^1.7",
+        "league/flysystem": "^3.0",
+        "matthiasnoback/symfony-dependency-injection-test": "^6.1",
+        "nyholm/symfony-bundle-test": "^3.1",
+        "phpunit/phpunit": "^10.5",
+        "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-phpunit": "^2.0",
+        "phpstan/phpstan-webmozart-assert": "^2.0",
+        "symfony/messenger": "^6.4|^7.0",
+        "symplify/easy-coding-standard": "^12.0"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": false,
+            "phpstan/extension-installer": true
+        },
+        "sort-packages": true
+    },
+    "autoload": {
+        "psr-4": {
+            "Lingoda\\LangfuseBundle\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Lingoda\\LangfuseBundle\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "symfony": {
+            "allow-contrib": true,
+            "require": "^6.4|^7.0"
+        }
+    }
+}

@@ -1,0 +1,20 @@
+parameters:
+    tmpDir: .phpstan-cache
+    level: 6
+    resultCachePath: '%tmpDir%/resultCache-tests.php'
+    paths:
+        - tests
+
+    # Test-specific relaxed rules
+    checkMissingCallableSignature: false
+    checkExplicitMixedMissingReturn: false
+    treatPhpDocTypesAsCertain: false
+    polluteScopeWithLoopInitialAssignments: false
+    polluteScopeWithAlwaysIterableForeach: false
+
+    # Exception handling - relaxed for tests
+    exceptions:
+        check:
+            missingCheckedExceptionInThrows: false
+            tooWideThrowType: false
+        implicitThrows: false
