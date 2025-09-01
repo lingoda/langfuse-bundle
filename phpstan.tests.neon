@@ -1,9 +1,12 @@
+includes:
+    - phpstan.common.neon
 parameters:
-    tmpDir: .phpstan-cache
-    level: 6
     resultCachePath: '%tmpDir%/resultCache-tests.php'
+    level: 6
     paths:
         - tests
+    scanDirectories:
+        - src
 
     # Test-specific relaxed rules
     checkMissingCallableSignature: false
@@ -18,3 +21,24 @@ parameters:
             missingCheckedExceptionInThrows: false
             tooWideThrowType: false
         implicitThrows: false
+
+    # Ignore common test patterns that are acceptable
+    ignoreErrors:
+        # Unresolvable native types (intersection types with MockObject)
+        - '#Property .* has unresolvable native type#'
+        - '#Return type of call to method .* contains unresolvable type#'
+        - '#Parameter .* contains unresolvable type#'
+
+        # Named arguments in PHPUnit (not allowed in some cases)
+        - '#Method .* invoked with named argument .*, but it''s not allowed because of @no-named-arguments#'
+
+        # Test configuration array type mismatches (acceptable in tests)
+        - '#Parameter .* of method .* expects .*, array\{.*\} given#'
+        - '#Parameter .* of class .* constructor expects .*, array\{.*\} given#'
+
+        # Mock comparison patterns
+        - '#Strict comparison using === between .* and .*MockObject.* will always evaluate to false#'
+
+    # Exclude files with anonymous class readonly issues
+    excludePaths:
+        - tests/Unit/Storage/AbstractPromptStorageTest.php

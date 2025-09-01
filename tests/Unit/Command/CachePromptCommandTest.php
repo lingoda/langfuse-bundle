@@ -60,7 +60,7 @@ final class CachePromptCommandTest extends TestCase
         $this->mockRegistry
             ->expects(self::once())
             ->method('getRawPrompt')
-            ->with('test-prompt', useCache: false)
+            ->with('test-prompt', false)
             ->willReturn(['name' => 'test-prompt', 'content' => 'Hello'])
         ;
 
@@ -132,7 +132,7 @@ final class CachePromptCommandTest extends TestCase
         $this->mockRegistry
             ->expects(self::once())
             ->method('getRawPrompt')
-            ->with('existing-prompt', useCache: false)
+            ->with('existing-prompt', false)
             ->willReturn(['name' => 'existing-prompt'])
         ;
 
@@ -183,7 +183,7 @@ final class CachePromptCommandTest extends TestCase
         $this->mockRegistry
             ->expects(self::once())
             ->method('getRawPrompt')
-            ->with('failing-prompt', useCache: false)
+            ->with('failing-prompt', false)
             ->willThrowException(new LangfuseException('Prompt not found'))
         ;
 

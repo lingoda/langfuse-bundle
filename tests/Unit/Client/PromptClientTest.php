@@ -30,8 +30,14 @@ final class PromptClientTest extends TestCase
         $this->mockClient = $this->createMock(Client::class);
         $this->mockConfig = $this->createMock(ClientConfig::class);
 
-        $this->mockConfig->host = 'https://api.langfuse.com';
+        // Configure mock methods instead of setting readonly properties
         $this->mockConfig->method('getAuthHeader')->willReturn('Bearer test-token');
+
+        // Create a reflection-based workaround or use property mapping
+        $reflectionConfig = new \ReflectionClass(ClientConfig::class);
+        $hostProperty = $reflectionConfig->getProperty('host');
+        $hostProperty->setAccessible(true);
+        $hostProperty->setValue($this->mockConfig, 'https://api.langfuse.com');
 
         $this->mockTraceClient->method('getClient')->willReturn($this->mockClient);
         $this->mockClient->method('getConfig')->willReturn($this->mockConfig);
@@ -258,8 +264,14 @@ final class PromptClientTest extends TestCase
     {
         // Create new mock config with trailing slash
         $mockConfig = $this->createMock(ClientConfig::class);
-        $mockConfig->host = 'https://api.langfuse.com/';
         $mockConfig->method('getAuthHeader')->willReturn('Bearer test-token');
+
+        // Use reflection to set readonly property for test
+        $reflectionConfig = new \ReflectionClass(ClientConfig::class);
+        $hostProperty = $reflectionConfig->getProperty('host');
+        $hostProperty->setAccessible(true);
+        $hostProperty->setValue($mockConfig, 'https://api.langfuse.com/');
+
         $this->mockClient->method('getConfig')->willReturn($mockConfig);
 
         $promptData = ['name' => 'test'];

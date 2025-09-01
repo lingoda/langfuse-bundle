@@ -31,9 +31,17 @@ final class PromptDeserializerTest extends TestCase
 
         $result = $this->deserializer->deserialize($promptData);
 
-        // Just verify it's a valid Conversation without testing internal structure
+        // Verify the conversation structure
         $conversationArray = $result->toArray();
-        self::assertIsArray($conversationArray);
+        self::assertCount(2, $conversationArray);
+
+        // Verify system message
+        self::assertEquals('system', $conversationArray[0]['role']);
+        self::assertEquals('You are a helpful assistant', $conversationArray[0]['content']);
+
+        // Verify user message
+        self::assertEquals('user', $conversationArray[1]['role']);
+        self::assertEquals('Hello, how are you?', $conversationArray[1]['content']);
     }
 
     public function testDeserializeSingleMessage(): void
@@ -46,8 +54,11 @@ final class PromptDeserializerTest extends TestCase
 
         $result = $this->deserializer->deserialize($promptData);
 
+        // Verify single user message
         $conversationArray = $result->toArray();
-        self::assertIsArray($conversationArray);
+        self::assertCount(1, $conversationArray);
+        self::assertEquals('user', $conversationArray[0]['role']);
+        self::assertEquals('What is the weather like?', $conversationArray[0]['content']);
     }
 
     public function testDeserializeComplexMessages(): void
@@ -71,8 +82,21 @@ final class PromptDeserializerTest extends TestCase
 
         $result = $this->deserializer->deserialize($promptData);
 
+        // Verify complex conversation structure (order: system, assistant, user)
         $conversationArray = $result->toArray();
-        self::assertIsArray($conversationArray);
+        self::assertCount(3, $conversationArray);
+
+        // Verify system message
+        self::assertEquals('system', $conversationArray[0]['role']);
+        self::assertEquals('You are an AI assistant that helps with coding questions.', $conversationArray[0]['content']);
+
+        // Verify assistant message (comes before user message in toArray() output)
+        self::assertEquals('assistant', $conversationArray[1]['role']);
+        self::assertEquals('Here is how you can write a function in Python:\n\n```python\ndef my_function():\n    return "Hello World"\n```', $conversationArray[1]['content']);
+
+        // Verify user message (always last)
+        self::assertEquals('user', $conversationArray[2]['role']);
+        self::assertEquals('How do I write a function in Python?', $conversationArray[2]['content']);
     }
 
     public function testDeserializeThrowsExceptionWhenPromptFieldMissing(): void
@@ -164,8 +188,11 @@ final class PromptDeserializerTest extends TestCase
 
         $result = $this->deserializer->deserialize($promptData);
 
+        // Verify metadata doesn't affect conversation structure (only prompt content matters)
         $conversationArray = $result->toArray();
-        self::assertIsArray($conversationArray);
+        self::assertCount(1, $conversationArray);
+        self::assertEquals('user', $conversationArray[0]['role']);
+        self::assertEquals('Test message', $conversationArray[0]['content']);
     }
 
     public function testDeserializeWithEmptyPromptData(): void
