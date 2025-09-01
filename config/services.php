@@ -82,9 +82,9 @@ return static function (ContainerConfigurator $container): void {
         ->args([
             service(TraceFlusherInterface::class),
             service('clock'),
+            param('kernel.environment'),
             param('lingoda_langfuse.tracing.enabled'),
             param('lingoda_langfuse.tracing.sampling_rate'),
-            param('kernel.environment'),
         ])
     ;
 
