@@ -6,7 +6,6 @@ namespace Lingoda\LangfuseBundle\Storage;
 
 use League\Flysystem\FilesystemOperator;
 use Lingoda\LangfuseBundle\PhpStan\Types;
-use Psr\Container\ContainerInterface;
 
 /**
  * Factory for creating appropriate storage services based on configuration.
@@ -16,7 +15,7 @@ use Psr\Container\ContainerInterface;
 final readonly class StorageFactory
 {
     public function __construct(
-        private ContainerInterface $container
+        private ?FilesystemOperator $filesystemService = null
     ) {
     }
 
@@ -38,23 +37,12 @@ final readonly class StorageFactory
         // Get storage configuration
         $storageConfig = $fallbackConfig['storage'] ?? [];
 
-        // Priority 1: Service-based storage (Flysystem)
-        if (!empty($storageConfig['service']) && is_string($storageConfig['service'])) {
-            $serviceId = $storageConfig['service'];
-            if ($this->container->has($serviceId)) {
-                try {
-                    $service = $this->container->get($serviceId);
-                    if ($service instanceof FilesystemOperator) {
-                        $storages[] = new FlysystemPromptStorage($service);
-                        $config = $service;
-                    }
-                } catch (\Throwable) {
-                    // Service doesn't exist or is not a FilesystemOperator, skip
-                }
-            }
+        // Priority 1: Injected filesystem service (when configured)
+        if ($this->filesystemService !== null) {
+            $storages[] = new FlysystemPromptStorage($this->filesystemService);
+            $config = $this->filesystemService;
         }
-
-        // Priority 2: Path-based storage (only if no service configured)
+        // Priority 2: Path-based storage
         elseif (!empty($storageConfig['path']) && is_string($storageConfig['path'])) {
             $path = $storageConfig['path'];
             $storages[] = new PathPromptStorage($path);

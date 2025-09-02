@@ -5,6 +5,7 @@ declare(strict_types = 1);
 namespace Lingoda\LangfuseBundle\Tests\Unit;
 
 use Lingoda\LangfuseBundle\LingodaLangfuseBundle;
+use Lingoda\LangfuseBundle\Storage\StorageFactory;
 use Lingoda\LangfuseBundle\Tracing\AsyncTraceFlusher;
 use Lingoda\LangfuseBundle\Tracing\TraceFlusherInterface;
 use PHPUnit\Framework\TestCase;
@@ -142,6 +143,75 @@ final class LingodaLangfuseBundleTest extends TestCase
         ];
 
         $tree->finalize($tree->normalize($invalidConfig));
+    }
+
+    public function testConfigureValidatesEmptyStorageWhenFallbackEnabled(): void
+    {
+        $treeBuilder = new TreeBuilder('lingoda_langfuse');
+        $mockLoader = $this->createMock(DefinitionFileLoader::class);
+        $configurator = new DefinitionConfigurator(
+            $treeBuilder,
+            $mockLoader,
+            __DIR__,
+            'test.php'
+        );
+
+        $this->bundle->configure($configurator);
+        $tree = $treeBuilder->buildTree();
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('When fallback is enabled, either storage.path or storage.service must be specified');
+
+        $invalidConfig = [
+            'connection' => [
+                'public_key' => 'test-key',
+                'secret_key' => 'test-secret'
+            ],
+            'prompts' => [
+                'fallback' => [
+                    'enabled' => true,
+                    // Missing storage configuration
+                ]
+            ]
+        ];
+
+        $tree->finalize($tree->normalize($invalidConfig));
+    }
+
+    public function testConfigureAppliesDefaultPathWhenNoStorageProvided(): void
+    {
+        $treeBuilder = new TreeBuilder('lingoda_langfuse');
+        $mockLoader = $this->createMock(DefinitionFileLoader::class);
+        $configurator = new DefinitionConfigurator(
+            $treeBuilder,
+            $mockLoader,
+            __DIR__,
+            'test.php'
+        );
+
+        $this->bundle->configure($configurator);
+        $tree = $treeBuilder->buildTree();
+
+        $config = [
+            'connection' => [
+                'public_key' => 'test-key',
+                'secret_key' => 'test-secret'
+            ],
+            'prompts' => [
+                'fallback' => [
+                    'enabled' => true,
+                    'storage' => [] // Empty storage should get default path
+                ]
+            ]
+        ];
+
+        $processedConfig = $tree->finalize($tree->normalize($config));
+
+        // Should have applied default path
+        self::assertEquals(
+            '%kernel.project_dir%/var/prompts',
+            $processedConfig['prompts']['fallback']['storage']['path']
+        );
     }
 
     public function testConfigureMethodStructure(): void
@@ -553,6 +623,137 @@ final class LingodaLangfuseBundleTest extends TestCase
         ;
 
         // Should bind all nested parameters
+        $mockBuilder
+            ->expects(self::atLeastOnce())
+            ->method('setParameter')
+        ;
+
+        $this->bundle->loadExtension($config, $mockContainer, $mockBuilder);
+    }
+
+    public function testLoadExtensionWithFallbackServiceConfiguration(): void
+    {
+        $config = [
+            'connection' => [
+                'public_key' => 'test-key',
+                'secret_key' => 'test-secret',
+            ],
+            'prompts' => [
+                'fallback' => [
+                    'enabled' => true,
+                    'storage' => [
+                        'service' => 'flysystem.storage'
+                    ]
+                ]
+            ]
+        ];
+
+        $mockContainer = $this->createMock(ContainerConfigurator::class);
+        $mockBuilder = $this->createMock(ContainerBuilder::class);
+        $mockDefinition = $this->createMock(Definition::class);
+
+        $mockContainer
+            ->expects(self::once())
+            ->method('import')
+            ->with('../config/services.php')
+        ;
+
+        $mockBuilder
+            ->expects(self::once())
+            ->method('getDefinition')
+            ->with(StorageFactory::class)
+            ->willReturn($mockDefinition)
+        ;
+
+        $mockDefinition
+            ->expects(self::once())
+            ->method('setArguments')
+            ->with([
+                new Reference('flysystem.storage')
+            ])
+            ->willReturnSelf()
+        ;
+
+        $mockBuilder
+            ->expects(self::atLeastOnce())
+            ->method('setParameter')
+        ;
+
+        $this->bundle->loadExtension($config, $mockContainer, $mockBuilder);
+    }
+
+    public function testLoadExtensionWithFallbackPathConfiguration(): void
+    {
+        $config = [
+            'connection' => [
+                'public_key' => 'test-key',
+                'secret_key' => 'test-secret',
+            ],
+            'prompts' => [
+                'fallback' => [
+                    'enabled' => true,
+                    'storage' => [
+                        'path' => '/custom/prompts'
+                    ]
+                ]
+            ]
+        ];
+
+        $mockContainer = $this->createMock(ContainerConfigurator::class);
+        $mockBuilder = $this->createMock(ContainerBuilder::class);
+
+        $mockContainer
+            ->expects(self::once())
+            ->method('import')
+            ->with('../config/services.php')
+        ;
+
+        // Should NOT modify StorageFactory when using path storage
+        $mockBuilder
+            ->expects(self::never())
+            ->method('getDefinition')
+        ;
+
+        $mockBuilder
+            ->expects(self::atLeastOnce())
+            ->method('setParameter')
+        ;
+
+        $this->bundle->loadExtension($config, $mockContainer, $mockBuilder);
+    }
+
+    public function testLoadExtensionWithFallbackDisabled(): void
+    {
+        $config = [
+            'connection' => [
+                'public_key' => 'test-key',
+                'secret_key' => 'test-secret',
+            ],
+            'prompts' => [
+                'fallback' => [
+                    'enabled' => false,
+                    'storage' => [
+                        'service' => 'some.service'
+                    ]
+                ]
+            ]
+        ];
+
+        $mockContainer = $this->createMock(ContainerConfigurator::class);
+        $mockBuilder = $this->createMock(ContainerBuilder::class);
+
+        $mockContainer
+            ->expects(self::once())
+            ->method('import')
+            ->with('../config/services.php')
+        ;
+
+        // Should NOT modify StorageFactory when fallback is disabled
+        $mockBuilder
+            ->expects(self::never())
+            ->method('getDefinition')
+        ;
+
         $mockBuilder
             ->expects(self::atLeastOnce())
             ->method('setParameter')

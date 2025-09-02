@@ -6,207 +6,98 @@ namespace Lingoda\LangfuseBundle\Tests\Unit\Storage;
 
 use League\Flysystem\FilesystemOperator;
 use Lingoda\LangfuseBundle\Storage\StorageFactory;
-use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use Psr\Container\ContainerInterface;
 
 final class StorageFactoryTest extends TestCase
 {
-    private ContainerInterface&MockObject $mockContainer;
-    private StorageFactory $factory;
-
-    protected function setUp(): void
-    {
-        $this->mockContainer = $this->createMock(ContainerInterface::class);
-        $this->factory = new StorageFactory($this->mockContainer);
-    }
-
     public function testCreateWithNullConfig(): void
     {
-        $registry = $this->factory->create(null);
+        $factory = new StorageFactory();
+        $registry = $factory->create(null);
         self::assertFalse($registry->isAvailable());
     }
 
     public function testCreateWithEmptyConfig(): void
     {
-        $registry = $this->factory->create([]);
+        $factory = new StorageFactory();
+        $registry = $factory->create([]);
         self::assertFalse($registry->isAvailable());
     }
 
     public function testCreateWithEmptyStorageConfig(): void
     {
+        $factory = new StorageFactory();
         $config = ['storage' => []];
-        $registry = $this->factory->create($config);
+        $registry = $factory->create($config);
         self::assertFalse($registry->isAvailable());
     }
 
-    public function testCreateWithFlysystemService(): void
+    public function testCreateWithInjectedFilesystemService(): void
     {
         if (!interface_exists(FilesystemOperator::class)) {
             self::markTestSkipped('Flysystem is not available');
         }
 
         $mockFilesystem = $this->createMock(FilesystemOperator::class);
-
-        $this->mockContainer
-            ->expects(self::once())
-            ->method('has')
-            ->with('flysystem.storage')
-            ->willReturn(true)
-        ;
-
-        $this->mockContainer
-            ->expects(self::once())
-            ->method('get')
-            ->with('flysystem.storage')
-            ->willReturn($mockFilesystem)
-        ;
+        $factory = new StorageFactory($mockFilesystem);
 
         $config = [
             'storage' => [
-                'service' => 'flysystem.storage'
+                'service' => 'some.service.id'
             ]
         ];
 
-        $registry = $this->factory->create($config);
+        $registry = $factory->create($config);
         self::assertTrue($registry->supports($mockFilesystem));
-    }
-
-    public function testCreateWithNonExistentService(): void
-    {
-        $this->mockContainer
-            ->expects(self::once())
-            ->method('has')
-            ->with('non.existent.service')
-            ->willReturn(false)
-        ;
-
-        $this->mockContainer
-            ->expects(self::never())
-            ->method('get')
-        ;
-
-        $config = [
-            'storage' => [
-                'service' => 'non.existent.service'
-            ]
-        ];
-
-        $registry = $this->factory->create($config);
-        self::assertFalse($registry->isAvailable());
-    }
-
-    public function testCreateWithInvalidServiceType(): void
-    {
-        $invalidService = new \stdClass();
-
-        $this->mockContainer
-            ->expects(self::once())
-            ->method('has')
-            ->with('invalid.service')
-            ->willReturn(true)
-        ;
-
-        $this->mockContainer
-            ->expects(self::once())
-            ->method('get')
-            ->with('invalid.service')
-            ->willReturn($invalidService)
-        ;
-
-        $config = [
-            'storage' => [
-                'service' => 'invalid.service'
-            ]
-        ];
-
-        $registry = $this->factory->create($config);
-        self::assertFalse($registry->isAvailable());
-    }
-
-    public function testCreateWithThrowingService(): void
-    {
-        $this->mockContainer
-            ->expects(self::once())
-            ->method('has')
-            ->with('throwing.service')
-            ->willReturn(true)
-        ;
-
-        $this->mockContainer
-            ->expects(self::once())
-            ->method('get')
-            ->with('throwing.service')
-            ->willThrowException(new \RuntimeException('Service error'))
-        ;
-
-        $config = [
-            'storage' => [
-                'service' => 'throwing.service'
-            ]
-        ];
-
-        $registry = $this->factory->create($config);
-        self::assertFalse($registry->isAvailable());
     }
 
     public function testCreateWithPathStorage(): void
     {
+        $factory = new StorageFactory();
         $config = [
             'storage' => [
                 'path' => '/tmp/prompts'
             ]
         ];
 
-        $registry = $this->factory->create($config);
+        $registry = $factory->create($config);
         self::assertTrue($registry->supports('/tmp/prompts'));
     }
 
     public function testCreateWithEmptyPath(): void
     {
+        $factory = new StorageFactory();
         $config = [
             'storage' => [
                 'path' => ''
             ]
         ];
 
-        $registry = $this->factory->create($config);
+        $registry = $factory->create($config);
         self::assertFalse($registry->isAvailable());
     }
 
     public function testCreateWithNullPath(): void
     {
+        $factory = new StorageFactory();
         $config = [
             'storage' => [
                 'path' => null
             ]
         ];
 
-        $registry = $this->factory->create($config);
+        $registry = $factory->create($config);
         self::assertFalse($registry->isAvailable());
     }
 
-    public function testServiceTakesPriorityOverPath(): void
+    public function testInjectedServiceTakesPriorityOverPath(): void
     {
         if (!interface_exists(FilesystemOperator::class)) {
             self::markTestSkipped('Flysystem is not available');
         }
 
         $mockFilesystem = $this->createMock(FilesystemOperator::class);
-
-        $this->mockContainer
-            ->expects(self::once())
-            ->method('has')
-            ->with('flysystem.storage')
-            ->willReturn(true)
-        ;
-
-        $this->mockContainer
-            ->expects(self::once())
-            ->method('get')
-            ->with('flysystem.storage')
-            ->willReturn($mockFilesystem)
-        ;
+        $factory = new StorageFactory($mockFilesystem);
 
         $config = [
             'storage' => [
@@ -215,15 +106,16 @@ final class StorageFactoryTest extends TestCase
             ]
         ];
 
-        $registry = $this->factory->create($config);
+        $registry = $factory->create($config);
 
-        // Should use Flysystem, not path storage
+        // Should use injected Flysystem, not path storage
         self::assertTrue($registry->supports($mockFilesystem));
         self::assertFalse($registry->supports('/tmp/prompts'));
     }
 
     public function testCreateWithComplexConfig(): void
     {
+        $factory = new StorageFactory();
         $config = [
             'other_key' => 'ignored',
             'storage' => [
@@ -233,18 +125,74 @@ final class StorageFactoryTest extends TestCase
             'another_key' => 'also_ignored'
         ];
 
-        $registry = $this->factory->create($config);
+        $registry = $factory->create($config);
         self::assertTrue($registry->supports('/var/cache/prompts'));
     }
 
     public function testCreateWithMissingStorageKey(): void
     {
+        $factory = new StorageFactory();
         $config = [
             'other_settings' => ['key' => 'value'],
             'not_storage' => ['path' => '/tmp']
         ];
 
-        $registry = $this->factory->create($config);
+        $registry = $factory->create($config);
+        self::assertFalse($registry->isAvailable());
+    }
+
+    public function testCreateWithNullFilesystemService(): void
+    {
+        $factory = new StorageFactory(null);
+        $config = [
+            'storage' => [
+                'path' => '/custom/path'
+            ]
+        ];
+
+        $registry = $factory->create($config);
+        self::assertTrue($registry->supports('/custom/path'));
+    }
+
+    public function testCreateWithFilesystemServiceIgnoresPath(): void
+    {
+        if (!interface_exists(FilesystemOperator::class)) {
+            self::markTestSkipped('Flysystem is not available');
+        }
+
+        $mockFilesystem = $this->createMock(FilesystemOperator::class);
+        $factory = new StorageFactory($mockFilesystem);
+
+        $config = [
+            'storage' => [
+                'path' => '/should/be/ignored'
+            ]
+        ];
+
+        $registry = $factory->create($config);
+
+        // Should use injected service, path should be ignored
+        self::assertTrue($registry->supports($mockFilesystem));
+        self::assertFalse($registry->supports('/should/be/ignored'));
+    }
+
+    public function testCreateWithNonStringPath(): void
+    {
+        $factory = new StorageFactory();
+        $config = [
+            'storage' => [
+                'path' => 12345 // Invalid non-string path
+            ]
+        ];
+
+        $registry = $factory->create($config);
+        self::assertFalse($registry->isAvailable());
+    }
+
+    public function testCreateWithEmptyFallbackConfig(): void
+    {
+        $factory = new StorageFactory();
+        $registry = $factory->create([]);
         self::assertFalse($registry->isAvailable());
     }
 }

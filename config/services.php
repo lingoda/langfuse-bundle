@@ -125,14 +125,14 @@ return static function (ContainerConfigurator $container): void {
     ;
 
     // Storage factory for creating appropriate storage implementations
-    $services->set('lingoda_langfuse.storage_factory')
-        ->class(StorageFactory::class)
-        ->args([service('service_container')])
+    $services->set(StorageFactory::class)
+        ->args([]) // No arguments by default, will be overridden if service is configured
     ;
 
     $services->set(PromptStorageRegistry::class)
-        ->factory([service('lingoda_langfuse.storage_factory'), 'create'])
+        ->factory([service(StorageFactory::class), 'create'])
         ->args([param('lingoda_langfuse.prompts.fallback')])
+        ->lazy(true)
     ;
 
     $services->set(PromptDeserializer::class);

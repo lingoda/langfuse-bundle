@@ -5,6 +5,7 @@ declare(strict_types = 1);
 namespace Lingoda\LangfuseBundle;
 
 use Lingoda\LangfuseBundle\PhpStan\Types;
+use Lingoda\LangfuseBundle\Storage\StorageFactory;
 use Lingoda\LangfuseBundle\Tracing\AsyncTraceFlusher;
 use Lingoda\LangfuseBundle\Tracing\TraceFlusherInterface;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
@@ -37,6 +38,7 @@ class LingodaLangfuseBundle extends AbstractBundle
                         ->scalarNode('host')->defaultValue('https://cloud.langfuse.com')->end()
                         ->integerNode('timeout')->defaultValue(30)->end()
                         ->arrayNode('retry')
+                            ->addDefaultsIfNotSet()
                             ->children()
                                 ->integerNode('max_attempts')->defaultValue(3)->end()
                                 ->integerNode('delay')->defaultValue(1000)->end()
@@ -123,6 +125,23 @@ class LingodaLangfuseBundle extends AbstractBundle
 
         $this->bindParameters($builder, $this->extensionAlias, $config);
 
+        // Handle prompts fallback storage configuration
+        $promptsConfig = $config['prompts'] ?? [];
+        $fallbackConfig = $promptsConfig['fallback'] ?? [];
+        if ($fallbackConfig['enabled']) {
+            $storageConfig = $fallbackConfig['storage'] ?? [];
+
+            // If a service is specified, modify the factory to inject the service directly
+            if (!empty($storageConfig['service'])) {
+                $serviceId = $storageConfig['service'];
+                $builder->getDefinition(StorageFactory::class)
+                    ->setArguments([
+                        new Reference($serviceId) // Inject the filesystem service directly
+                    ])
+                ;
+            }
+        }
+
         $tracingConfig = $config['tracing'];
         if ($tracingConfig['async_flush']['enabled']) {
             $messageBus = $tracingConfig['async_flush']['message_bus'];
@@ -158,6 +177,7 @@ class LingodaLangfuseBundle extends AbstractBundle
 
     /**
      * @param BundleConfig $config
+     *
      * @return BundleConfig
      */
     private function ensureDefaults(array $config): array
