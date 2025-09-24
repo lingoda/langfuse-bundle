@@ -42,12 +42,6 @@ final readonly class PromptRegistry implements PromptRegistryInterface
         }
     }
 
-    /**
-     * @param array<string, mixed>       $parameters
-     *
-     * @throws LangfuseException
-     * @return Conversation
-     */
     public function getCompiled(string $name, array $parameters, ?int $version = null, ?string $label = null, bool $useCache = true): Conversation
     {
         $conversation = $this->get($name, $version, $label, $useCache);

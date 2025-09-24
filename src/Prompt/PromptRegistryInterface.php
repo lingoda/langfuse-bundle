@@ -25,6 +25,18 @@ interface PromptRegistryInterface
     public function get(string $name, ?int $version = null, ?string $label = null, bool $useCache = true): Conversation;
 
     /**
+     * Get and deserialize a prompt into a Conversation object with parameters compiled.
+     *
+     * @param string $name Prompt name
+     * @param array<string, mixed> $parameters Parameters to inject into the prompt
+     * @param int|null $version Prompt version (null for latest)
+     * @param string|null $label Prompt label
+     * @param bool $useCache Whether to use cache (default: true)
+     * @throws LangfuseException When prompt cannot be loaded or deserialized
+     */
+    public function getCompiled(string $name, array $parameters, ?int $version = null, ?string $label = null, bool $useCache = true): Conversation;
+
+    /**
      * Check if a prompt exists.
      */
     public function has(string $name, ?int $version = null, ?string $label = null): bool;
