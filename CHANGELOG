@@ -10,3 +10,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 
 - Add API to fetch compiled prompts
+
+## [1.1.2]
+
+### Fixed
+
+- PromptRegistryInterface missing getCompiled method
