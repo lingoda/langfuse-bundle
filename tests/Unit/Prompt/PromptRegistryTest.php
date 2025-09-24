@@ -4,7 +4,10 @@ declare(strict_types = 1);
 
 namespace Lingoda\LangfuseBundle\Tests\Unit\Prompt;
 
+use Lingoda\AiSdk\Prompt\AssistantPrompt;
 use Lingoda\AiSdk\Prompt\Conversation;
+use Lingoda\AiSdk\Prompt\SystemPrompt;
+use Lingoda\AiSdk\Prompt\UserPrompt;
 use Lingoda\LangfuseBundle\Cache\PromptCache;
 use Lingoda\LangfuseBundle\Client\PromptClient;
 use Lingoda\LangfuseBundle\Deserialization\PromptDeserializer;
@@ -423,5 +426,66 @@ final class PromptRegistryTest extends TestCase
         $result = $this->registry->getRawPrompt('no-storage', null, null, false);
 
         self::assertEquals($promptData, $result);
+    }
+
+    public function testGetCompiledPrompt(): void
+    {
+        $promptData = [
+            'name' => 'no-cache-prompt',
+            'prompt' => [
+                ['role' => 'user', 'content' => 'Hello {{world}}'],
+                ['role' => 'system', 'content' => 'System message {{info}}'],
+                ['role' => 'assistant', 'content' => 'Assistant message {{data}}']
+            ]
+        ];
+
+        $this->mockClient
+            ->expects(self::once())
+            ->method('getPromptFromAPI')
+            ->with('no-cache-prompt', 2, 'staging')
+            ->willReturn($promptData)
+        ;
+
+        $this->mockStorage
+            ->expects(self::once())
+            ->method('isAvailable')
+            ->willReturn(true)
+        ;
+
+        $this->mockStorage
+            ->expects(self::once())
+            ->method('save')
+            ->with('no-cache-prompt', $promptData, 2, 'staging')
+            ->willReturn(true)
+        ;
+
+        $this->mockDeserializer
+            ->expects(self::once())
+            ->method('deserialize')
+            ->with($promptData)
+            ->willReturnCallback(function ($data) {
+                $userPrompt = new UserPrompt($data['prompt'][0]['content']);
+                $systemPrompt = new SystemPrompt($data['prompt'][1]['content']);
+                $assistantPrompt = new AssistantPrompt($data['prompt'][2]['content']);
+
+                return new Conversation($userPrompt, $systemPrompt, $assistantPrompt);
+            })
+        ;
+
+        $result = $this->registry->getCompiled(
+            'no-cache-prompt',
+            [
+                'world' => 'Earth',
+                'info' => 'Some info',
+                'data' => 'Some data'
+            ],
+            2,
+            'staging',
+            false
+        );
+
+        self::assertSame('Hello Earth', $result->getUserPrompt()->getContent());
+        self::assertSame('System message Some info', $result->getSystemPrompt()?->getContent());
+        self::assertSame('Assistant message Some data', $result->getAssistantPrompt()?->getContent());
     }
 }

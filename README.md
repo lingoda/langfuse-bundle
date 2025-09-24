@@ -194,7 +194,7 @@ class EmailService
     public function generateCustomEmail(string $promptName, array $variables): Conversation
     {
         // Get specific version with variables
-        $prompt = $this->prompts->get($promptName, $variables);
+        $prompt = $this->prompts->getCompiled($promptName, $variables);
 
         return $prompt;
     }
