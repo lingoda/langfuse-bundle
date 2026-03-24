@@ -27,7 +27,6 @@ class LingodaLangfuseBundle extends AbstractBundle
         /** @var ArrayNodeDefinition $rootNode */
         $rootNode = $definition->rootNode();
 
-        /** @phpstan-ignore-next-line */
         $rootNode
             ->children()
                 // Connection settings
