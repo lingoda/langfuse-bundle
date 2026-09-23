@@ -51,6 +51,7 @@ return static function (ContainerConfigurator $container): void {
         ->args([
             service(LangfuseConnection::class),
             service('http_client')->nullOnInvalid(),
+            param('lingoda_langfuse.tracing.export_timeout'),
         ])
     ;
 
