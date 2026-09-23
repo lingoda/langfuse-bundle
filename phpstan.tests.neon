@@ -29,9 +29,6 @@ parameters:
         - '#Return type of call to method .* contains unresolvable type#'
         - '#Parameter .* contains unresolvable type#'
 
-        # Named arguments in PHPUnit (not allowed in some cases)
-        - '#Method .* invoked with named argument .*, but it''s not allowed because of @no-named-arguments#'
-
         # Test configuration array type mismatches (acceptable in tests)
         - '#Parameter .* of method .* expects .*, array\{.*\} given#'
         - '#Parameter .* of class .* constructor expects .*, array\{.*\} given#'

@@ -67,6 +67,8 @@ final readonly class TraceManager implements TraceManagerInterface
         } finally {
             $duration = $this->calculateDuration($startTime);
             $traceData = $this->buildTraceData($name, $metadata, $input, $result, $duration, $error, $recordContent);
+            // Async flushing sends later: keep when the operation actually ran
+            $traceData['started_at'] = (float) $startTime->format('U.u');
 
             // Delegate to flush service (sync or async)
             $usage = $result instanceof ResultInterface ? $result->getUsage() : null;

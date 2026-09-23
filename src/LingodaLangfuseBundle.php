@@ -39,6 +39,7 @@ class LingodaLangfuseBundle extends AbstractBundle
                         ->scalarNode('host')->defaultValue('https://cloud.langfuse.com')->end()
                         ->integerNode('timeout')->defaultValue(30)->end()
                         ->arrayNode('retry')
+                            ->setDeprecated('lingoda/langfuse-bundle', '2.0', 'The "%node%" option at "%path%" is ignored since traces are sent over OpenTelemetry: synchronous tracing never retries, async flushing is retried by Messenger.')
                             ->addDefaultsIfNotSet()
                             ->children()
                                 ->integerNode('max_attempts')->defaultValue(3)->end()

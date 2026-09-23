@@ -16,7 +16,7 @@ A Symfony bundle for integrating with Langfuse, providing AI operation tracing, 
 - PHP 8.4 or higher
 - Symfony 7.4 or 8.0+
 - Lingoda AI Bundle 2.0+ and Lingoda AI SDK 2.1+ (the bundle decorates the SDK's platforms)
-- Dropsolid Langfuse PHP SDK 1.3.1+
+- Langfuse Cloud or a self-hosted Langfuse on v4 (traces are sent as OpenTelemetry, see [Langfuse v4](#langfuse-v4-ingestion))
 
 ## Installation
 
@@ -263,56 +263,35 @@ lingoda_langfuse:
                 service: 'prompts.storage'
 ```
 
-### Direct TraceClient Usage
+### Manual Tracing
 
-For manual tracing beyond automatic AI operations:
+For operations the decorators do not cover, trace them through `TraceManagerInterface`: the same path, sampling, `trace_content` handling and flushing as the automatic traces.
 
 ```php
-use Lingoda\LangfuseBundle\Client\TraceClient;
+use Lingoda\AiSdk\Result\TextResult;
+use Lingoda\LangfuseBundle\Tracing\TraceManagerInterface;
 
-class AnalyticsService
+class SummaryService
 {
     public function __construct(
-        private TraceClient $traceClient
+        private TraceManagerInterface $traceManager
     ) {}
 
-    public function processUserAction(User $user, string $action): void
+    public function summarize(string $text): TextResult
     {
-        $trace = $this->traceClient->trace([
-            'name' => 'user-action',
-            'userId' => $user->getId(),
-            'metadata' => ['action' => $action],
-            'input' => ['timestamp' => time()]
-        ]);
-
-        // For AI operations, create a generation
-        if ($action === 'ai-query') {
-            $generation = $trace->createGeneration(
-                name: 'ai-completion',
-                model: 'gpt-4',
-                input: ['query' => 'user question']
-            );
-
-            // Set usage details for cost tracking
-            $generation->withUsageDetails([
-                'prompt_tokens' => 15,
-                'completion_tokens' => 8,
-                'total_tokens' => 23
-            ]);
-
-            $generation->end(['output' => 'AI response']);
-        }
-
-        $trace->end([
-            'output' => ['status' => 'completed'],
-            'statusMessage' => 'Action processed successfully'
-        ]);
-
-        // Manually flush if needed (automatic in most cases)
-        $this->traceClient->flush();
+        return $this->traceManager->trace(
+            'custom-summary',
+            ['model' => 'my-local-model'], // a model makes it a generation
+            $text,
+            fn () => $this->runSummary($text) // returns a ResultInterface
+        );
     }
 }
 ```
+
+### Langfuse v4 Ingestion
+
+Traces are sent to Langfuse's OpenTelemetry endpoint (`POST /api/public/otel/v1/traces`, OTLP/HTTP JSON, header `x-langfuse-ingestion-version: 4`), the [v4 ingestion path](https://langfuse.com/integrations/native/opentelemetry/migration-to-v4). The legacy `/api/public/ingestion` endpoint is served only until November 16, 2026 and is not used. Each trace is one root observation, a generation when the result names a model, carrying input, output, usage (`input`, `output`, `total`, `input_cached_tokens`, `output_reasoning_tokens`), model, prompt link, level and metadata as `langfuse.*` attributes. Prompt management uses `GET /api/public/prompts`, which v4 keeps.
 
 ## Configuration Reference
 
@@ -435,7 +414,7 @@ The bundle follows clean architecture principles with focused, single-responsibi
 - **FlushLangfuseTraceHandler**: Processes async messages (delegates to sync flusher)
 - **PromptRegistry**: Manages prompt lifecycle with caching and storage
 - **PromptClient**: Handles API communication with Langfuse
-- **TraceClient**: Direct trace creation and management
+- **OtlpTraceExporter**: Sends each trace to Langfuse's OpenTelemetry endpoint
 
 ### Trace Processing Architecture
 

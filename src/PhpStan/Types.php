@@ -30,6 +30,7 @@ namespace Lingoda\LangfuseBundle\PhpStan;
  *     metadata: array<string, mixed>,
  *     input: InputData,
  *     duration: float,
+ *     started_at?: float,
  *     status: 'error'|'success',
  *     output?: OutputData,
  *     usage?: array<string, mixed>,

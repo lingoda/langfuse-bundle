@@ -4,13 +4,12 @@ declare(strict_types = 1);
 
 namespace Symfony\Component\DependencyInjection\Loader\Configurator;
 
-use Dropsolid\LangFuse\Client;
-use Dropsolid\LangFuse\DTO\ClientConfig;
 use Lingoda\AiSdk\Decision\DecisionPlatformInterface;
 use Lingoda\AiSdk\PlatformInterface;
 use Lingoda\LangfuseBundle\Cache\PromptCache;
+use Lingoda\LangfuseBundle\Client\LangfuseConnection;
+use Lingoda\LangfuseBundle\Client\OtlpTraceExporter;
 use Lingoda\LangfuseBundle\Client\PromptClient;
-use Lingoda\LangfuseBundle\Client\TraceClient;
 use Lingoda\LangfuseBundle\Command\CachePromptCommand;
 use Lingoda\LangfuseBundle\Command\TestConnectionCommand;
 use Lingoda\LangfuseBundle\Deserialization\PromptDeserializer;
@@ -38,31 +37,21 @@ return static function (ContainerConfigurator $container): void {
 
     // === Core Client Configuration ===
 
-    $services->set(ClientConfig::class)
-        ->factory([ClientConfig::class, 'fromArray'])
-        ->args([[
-            'public_key' => param('lingoda_langfuse.connection.public_key'),
-            'secret_key' => param('lingoda_langfuse.connection.secret_key'),
-            'host' => param('lingoda_langfuse.connection.host'),
-            'timeout' => param('lingoda_langfuse.connection.timeout'),
-            'retry' => [
-                'max_attempts' => param('lingoda_langfuse.connection.retry.max_attempts'),
-                'delay' => param('lingoda_langfuse.connection.retry.delay'),
-            ],
-        ]])
-    ;
-
-    $services->set(Client::class)
-        ->args([service(ClientConfig::class)])
-    ;
-
-    $services->set(TraceClient::class)
+    $services->set(LangfuseConnection::class)
         ->args([
-            service(Client::class),
-            service('logger')->nullOnInvalid(),
+            param('lingoda_langfuse.connection.host'),
+            param('lingoda_langfuse.connection.public_key'),
+            param('lingoda_langfuse.connection.secret_key'),
+            param('lingoda_langfuse.connection.timeout'),
         ])
-        ->public()
-        ->tag('monolog.logger', ['channel' => 'langfuse'])
+    ;
+
+    // Langfuse v4 ingestion: OpenTelemetry over HTTP/JSON
+    $services->set(OtlpTraceExporter::class)
+        ->args([
+            service(LangfuseConnection::class),
+            service('http_client')->nullOnInvalid(),
+        ])
     ;
 
     // === Trace Flushing Services ===
@@ -70,7 +59,7 @@ return static function (ContainerConfigurator $container): void {
     // Synchronous flush service
     $services->set(SyncTraceFlusher::class)
         ->args([
-            service(TraceClient::class),
+            service(OtlpTraceExporter::class),
             service('logger')->nullOnInvalid(),
         ])
         ->public()
@@ -153,7 +142,7 @@ return static function (ContainerConfigurator $container): void {
 
     $services->set(PromptClient::class)
         ->args([
-            service(TraceClient::class),
+            service(LangfuseConnection::class),
             service('http_client')->nullOnInvalid(),
         ])
     ;
@@ -174,7 +163,7 @@ return static function (ContainerConfigurator $container): void {
     // === Console Commands ===
 
     $services->set(TestConnectionCommand::class)
-        ->args([service(TraceClient::class)])
+        ->args([service(LangfuseConnection::class), service('http_client')->nullOnInvalid()])
         ->tag('console.command')
     ;
 
