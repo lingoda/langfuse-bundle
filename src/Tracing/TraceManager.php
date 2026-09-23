@@ -69,6 +69,9 @@ final readonly class TraceManager implements TraceManagerInterface
             $traceData = $this->buildTraceData($name, $metadata, $input, $result, $duration, $error, $recordContent);
             // Async flushing sends later: keep when the operation actually ran
             $traceData['started_at'] = (float) $startTime->format('U.u');
+            // Fixed here, so a retried async flush sends the same observation instead of a duplicate
+            $traceData['trace_id'] = bin2hex(random_bytes(16));
+            $traceData['span_id'] = bin2hex(random_bytes(8));
 
             // Delegate to flush service (sync or async)
             $usage = $result instanceof ResultInterface ? $result->getUsage() : null;

@@ -44,6 +44,8 @@ final readonly class LangfusePlatformDecorator implements PlatformInterface
 
         $model = $this->resolveModel($modelId);
         $metadata['provider'] = $model->getProvider()->getName();
+        // The requested model makes a failed call a generation too; the model the result reports replaces it
+        $metadata['model'] = $model->getId();
 
         $traceName = $options['trace_name'] ?? 'ai-completion';
         Assert::string($traceName);

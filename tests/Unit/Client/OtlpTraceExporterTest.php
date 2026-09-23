@@ -195,4 +195,12 @@ final class OtlpTraceExporterTest extends TestCase
 
         return $data;
     }
+
+    public function testRetriedTraceKeepsItsIds(): void
+    {
+        $span = $this->span($this->traceData(['trace_id' => str_repeat('ab', 16), 'span_id' => str_repeat('cd', 8)]));
+
+        self::assertSame(str_repeat('ab', 16), $span['traceId']);
+        self::assertSame(str_repeat('cd', 8), $span['spanId']);
+    }
 }

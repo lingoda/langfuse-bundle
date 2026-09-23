@@ -31,6 +31,8 @@ namespace Lingoda\LangfuseBundle\PhpStan;
  *     input: InputData,
  *     duration: float,
  *     started_at?: float,
+ *     trace_id?: string,
+ *     span_id?: string,
  *     status: 'error'|'success',
  *     output?: OutputData,
  *     usage?: array<string, mixed>,

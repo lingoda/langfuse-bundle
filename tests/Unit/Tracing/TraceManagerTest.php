@@ -567,4 +567,29 @@ final class TraceManagerTest extends TestCase
 
         return $traced;
     }
+
+    public function testTraceIdsAreFixedWhenTheTraceIsBuilt(): void
+    {
+        $traced = $this->captureTrace();
+
+        $this->traceManager->trace('ai-completion', [], 'x', static fn () => new TextResult('ok'));
+
+        self::assertMatchesRegularExpression('/^[0-9a-f]{32}$/', $traced->data['trace_id'] ?? '');
+        self::assertMatchesRegularExpression('/^[0-9a-f]{16}$/', $traced->data['span_id'] ?? '');
+        self::assertSame((float) $this->clock->now()->format('U.u'), $traced->data['started_at'] ?? null);
+    }
+
+    public function testFailedCallKeepsTheRequestedModel(): void
+    {
+        $traced = $this->captureTrace();
+
+        try {
+            $this->traceManager->trace('ai-completion', ['model' => 'gpt-4o'], 'x', static fn () => throw new \RuntimeException('Rate limit exceeded'));
+        } catch (\RuntimeException) {
+        }
+
+        // A failed call keeps the model the decorator requested, so it is still flushed as a generation
+        self::assertSame('gpt-4o', $traced->data['metadata']['model']);
+        self::assertSame('Rate limit exceeded', $traced->data['error']);
+    }
 }

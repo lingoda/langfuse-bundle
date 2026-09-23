@@ -36,7 +36,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `connection.retry` is deprecated and ignored: synchronous tracing never retries, async flushing is retried by Messenger.
 - `langfuse:test-connection` checks the host and keys with an authenticated `GET /api/public/projects` instead of writing a test trace.
 - `TraceManagerInterface::trace()` also accepts an array input (a structured request such as a decision) and takes a fifth argument `bool $recordContent = true`. Custom implementations must adopt the new signature.
-- Async flushing: `FlushLangfuseTraceHandler` calls `SyncTraceFlusher::send()`, so a failed flush is retried by Messenger and ends in the failure transport after the last retry. Before, every failure was swallowed and the trace lost. Use `trace_content: false` for calls whose content must not be stored there.
+- Async flushing: `FlushLangfuseTraceHandler` calls `SyncTraceFlusher::send()`, so a failed flush is retried by Messenger (transport errors, 429, 5xx) and ends in the failure transport after the last retry; a trace Langfuse rejects (other 4xx) goes there at once. Trace and span ids are fixed when the trace is built, so a retry overwrites instead of duplicating. Before, every failure was swallowed and the trace lost. Use `trace_content: false` for calls whose content must not be stored there.
+- A failed `ask()` or `decide()` is still a generation: the requested model is recorded up front (the model the result reports replaces it on success), so failures carry the model, level `ERROR` and the prompt link.
 - `PromptRegistry::has()` looks up the prompt like `get()` (cache, Langfuse, fallback storage) instead of the fallback storage only.
 - The default async message bus is `messenger.default_bus` everywhere (one code path used `messenger.bus.default`).
 - Errors are sent as observation level `ERROR` with the message as status message.

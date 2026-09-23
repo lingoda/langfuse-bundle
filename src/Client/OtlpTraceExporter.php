@@ -123,8 +123,8 @@ final readonly class OtlpTraceExporter
         }
 
         $span = [
-            'traceId' => bin2hex(random_bytes(16)),
-            'spanId' => bin2hex(random_bytes(8)),
+            'traceId' => $traceData['trace_id'] ?? bin2hex(random_bytes(16)),
+            'spanId' => $traceData['span_id'] ?? bin2hex(random_bytes(8)),
             'name' => $traceData['name'],
             'kind' => self::SPAN_KIND_INTERNAL,
             'startTimeUnixNano' => self::nanos($endedAt - $traceData['duration']),

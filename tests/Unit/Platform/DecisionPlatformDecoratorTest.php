@@ -37,7 +37,7 @@ final class DecisionPlatformDecoratorTest extends TestCase
             ->method('trace')
             ->with(
                 'typesafe-system-one',
-                ['provider' => 'TypeSafe'],
+                ['provider' => 'TypeSafe', 'model' => 'jev-latest'],
                 ['state' => 'Please refund', 'model' => 'jev-latest', 'questions' => ['refund' => $questions['refund']->toArray()]],
                 self::isInstanceOf(\Closure::class)
             )
@@ -71,7 +71,7 @@ final class DecisionPlatformDecoratorTest extends TestCase
 
         $this->traceManager->expects(self::once())
             ->method('trace')
-            ->with('acme-decision', ['provider' => 'Acme'])
+            ->with('acme-decision', ['provider' => 'Acme', 'model' => 'acme-1'])
             ->willReturn(new DecisionResult([]))
         ;
 

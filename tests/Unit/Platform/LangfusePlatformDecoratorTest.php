@@ -49,6 +49,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
         $mockProvider = $this->createMock(ProviderInterface::class);
         $mockProvider->method('getName')->willReturn('openai');
         $mockModel->method('getProvider')->willReturn($mockProvider);
+        $mockModel->method('getId')->willReturn('resolved-model');
 
         $this->mockPlatform
             ->expects(self::once())
@@ -62,7 +63,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
             ->method('trace')
             ->with(
                 'ai-completion',
-                ['provider' => 'openai'],
+                ['provider' => 'openai', 'model' => 'resolved-model'],
                 $input,
                 self::isInstanceOf(\Closure::class)
             )
@@ -90,6 +91,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
         $mockProvider = $this->createMock(ProviderInterface::class);
         $mockProvider->method('getName')->willReturn('anthropic');
         $mockModel->method('getProvider')->willReturn($mockProvider);
+        $mockModel->method('getId')->willReturn('resolved-model');
 
         $this->mockPlatform
             ->expects(self::once())
@@ -103,7 +105,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
             ->method('trace')
             ->with(
                 'ai-completion',
-                ['provider' => 'anthropic'],
+                ['provider' => 'anthropic', 'model' => 'resolved-model'],
                 $prompt,
                 self::isInstanceOf(\Closure::class)
             )
@@ -132,6 +134,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
         $mockProvider = $this->createMock(ProviderInterface::class);
         $mockProvider->method('getName')->willReturn('anthropic');
         $mockModel->method('getProvider')->willReturn($mockProvider);
+        $mockModel->method('getId')->willReturn('resolved-model');
 
         $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
 
@@ -140,7 +143,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
             ->method('trace')
             ->with(
                 'ai-completion',
-                ['provider' => 'anthropic'],
+                ['provider' => 'anthropic', 'model' => 'resolved-model'],
                 $conversation,
                 self::isInstanceOf(\Closure::class)
             )
@@ -167,6 +170,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
         $mockProvider = $this->createMock(ProviderInterface::class);
         $mockProvider->method('getName')->willReturn('openai');
         $mockModel->method('getProvider')->willReturn($mockProvider);
+        $mockModel->method('getId')->willReturn('resolved-model');
 
         $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
 
@@ -175,7 +179,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
             ->method('trace')
             ->with(
                 'custom-operation',
-                ['provider' => 'openai'],
+                ['provider' => 'openai', 'model' => 'resolved-model'],
                 $input,
                 self::isInstanceOf(\Closure::class)
             )
@@ -445,6 +449,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
         $mockProvider = $this->createMock(ProviderInterface::class);
         $mockProvider->method('getName')->willReturn('AWS Bedrock');
         $mockModel->method('getProvider')->willReturn($mockProvider);
+        $mockModel->method('getId')->willReturn('resolved-model');
         $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
 
         $this->mockTraceManager
@@ -452,7 +457,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
             ->method('trace')
             ->with(
                 'ai-completion',
-                ['provider' => 'AWS Bedrock', 'langfuse_prompt' => ['name' => 'mnr-voucher-fields', 'version' => 3]],
+                ['provider' => 'AWS Bedrock', 'model' => 'resolved-model', 'langfuse_prompt' => ['name' => 'mnr-voucher-fields', 'version' => 3]],
                 'voucher',
                 self::isInstanceOf(\Closure::class),
                 false

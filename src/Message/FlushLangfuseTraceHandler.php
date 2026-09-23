@@ -4,9 +4,11 @@ declare(strict_types = 1);
 
 namespace Lingoda\LangfuseBundle\Message;
 
+use Lingoda\LangfuseBundle\Exception\LangfuseException;
 use Lingoda\LangfuseBundle\Tracing\SyncTraceFlusher;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Symfony\Component\Messenger\Exception\UnrecoverableMessageHandlingException;
 
 /**
  * Handler for asynchronous Langfuse trace flushing.
@@ -44,7 +46,14 @@ final readonly class FlushLangfuseTraceHandler
                 'error' => $e->getMessage(),
                 'trace_name' => $traceData['name'] ?? 'unknown',
             ]);
-            // Re-throw to allow retry via message queue
+
+            // Langfuse rejected the trace itself (4xx other than 429): a retry sends the same payload, so go to the failure transport
+            $status = $e instanceof LangfuseException ? $e->getCode() : 0;
+            if ($status >= 400 && $status < 500 && $status !== 429) {
+                throw new UnrecoverableMessageHandlingException($e->getMessage(), $status, $e);
+            }
+
+            // Transport errors, 429 and 5xx: let Messenger retry
             throw $e;
         }
     }

@@ -30,13 +30,15 @@ final readonly class DecisionPlatformDecorator implements DecisionPlatformInterf
     public function decide(string|array $state, array $questions, ?string $model = null): DecisionResult
     {
         $provider = $this->decorated->getProvider();
+        $requestedModel = $model ?? $provider->getDefaultModel();
 
         $result = $this->traceManager->trace(
             $provider->is(AIProvider::TYPESAFE) ? 'typesafe-system-one' : $provider->getId() . '-decision',
-            ['provider' => $provider->getName()],
+            // The requested model makes a failed decision a generation too; the model TypeSafe reports replaces it
+            ['provider' => $provider->getName(), 'model' => $requestedModel],
             [
                 'state' => $state,
-                'model' => $model ?? $provider->getDefaultModel(),
+                'model' => $requestedModel,
                 'questions' => array_map(static fn (Question $question): array => $question->toArray(), $questions),
             ],
             fn () => $this->decorated->decide($state, $questions, $model)
