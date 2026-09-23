@@ -153,7 +153,7 @@ The bundle automatically extracts and sends usage metrics in the proper format f
 - **Prompt tokens**: Input token count
 - **Completion tokens**: Output token count
 - **Total tokens**: Combined count
-- **Cached and reasoning tokens**: when the provider reports them, as `prompt_tokens_details.cached_tokens` and `completion_tokens_details.reasoning_tokens`
+- **Cached and reasoning tokens**: when the provider reports them, as `input_cached_tokens` and `output_reasoning_tokens`
 - **Model information**: For accurate cost calculation
 - **Proper generation structure**: Trace → Generation hierarchy
 
