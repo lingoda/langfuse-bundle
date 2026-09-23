@@ -13,6 +13,7 @@ use Lingoda\LangfuseBundle\Client\PromptClient;
 use Lingoda\LangfuseBundle\Deserialization\PromptDeserializer;
 use Lingoda\LangfuseBundle\Exception\DeserializationException;
 use Lingoda\LangfuseBundle\Exception\LangfuseException;
+use Lingoda\LangfuseBundle\Prompt\PromptReference;
 use Lingoda\LangfuseBundle\Prompt\PromptRegistry;
 use Lingoda\LangfuseBundle\Storage\PromptStorageRegistry;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -283,32 +284,62 @@ final class PromptRegistryTest extends TestCase
         self::assertSame($conversation, $result);
     }
 
-    public function testHasPrompt(): void
+    public function testHasPromptFoundInLangfuse(): void
     {
-        $this->mockStorage
-            ->expects(self::once())
-            ->method('exists')
+        $this->mockCache->method('isAvailable')->willReturn(false);
+        $this->mockClient->expects(self::once())
+            ->method('getPromptFromAPI')
             ->with('existing-prompt', 3, 'label')
-            ->willReturn(true)
+            ->willReturn(['name' => 'existing-prompt', 'version' => 3])
         ;
+        $this->mockStorage->method('isAvailable')->willReturn(false);
 
-        $result = $this->registry->has('existing-prompt', 3, 'label');
+        self::assertTrue($this->registry->has('existing-prompt', 3, 'label'));
+    }
 
-        self::assertTrue($result);
+    public function testHasPromptFoundOnlyInFallbackStorage(): void
+    {
+        $this->mockCache->method('isAvailable')->willReturn(false);
+        $this->mockClient->method('getPromptFromAPI')->willThrowException(new LangfuseException('Langfuse is down'));
+        $this->mockStorage->method('isAvailable')->willReturn(true);
+        $this->mockStorage->method('load')->with('stored-prompt', null, null)->willReturn(['name' => 'stored-prompt', 'version' => 2]);
+
+        self::assertTrue($this->registry->has('stored-prompt'));
     }
 
     public function testHasPromptReturnsFalse(): void
     {
-        $this->mockStorage
-            ->expects(self::once())
-            ->method('exists')
-            ->with('non-existing-prompt', null, null)
-            ->willReturn(false)
+        $this->mockCache->method('isAvailable')->willReturn(false);
+        $this->mockClient->method('getPromptFromAPI')->willThrowException(new LangfuseException('Prompt not found'));
+        $this->mockStorage->method('isAvailable')->willReturn(true);
+        $this->mockStorage->method('load')->willReturn(null);
+
+        self::assertFalse($this->registry->has('non-existing-prompt'));
+    }
+
+    public function testReferenceUsesTheVersionLangfuseResolved(): void
+    {
+        $this->mockCache->method('isAvailable')->willReturn(false);
+        $this->mockClient->expects(self::once())
+            ->method('getPromptFromAPI')
+            ->with('mnr-voucher-fields', null, 'production')
+            ->willReturn(['name' => 'mnr-voucher-fields', 'version' => 7])
         ;
 
-        $result = $this->registry->has('non-existing-prompt');
+        $reference = $this->registry->reference('mnr-voucher-fields', label: 'production');
 
-        self::assertFalse($result);
+        self::assertEquals(new PromptReference('mnr-voucher-fields', 7), $reference);
+    }
+
+    public function testReferenceWithoutVersionFails(): void
+    {
+        $this->mockCache->method('isAvailable')->willReturn(false);
+        $this->mockClient->method('getPromptFromAPI')->willReturn(['name' => 'unversioned']);
+
+        $this->expectException(LangfuseException::class);
+        $this->expectExceptionMessage('Prompt "unversioned" has no version to link a generation to');
+
+        $this->registry->reference('unversioned');
     }
 
     public function testGetRawPromptWithCache(): void

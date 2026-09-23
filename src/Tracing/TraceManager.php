@@ -4,6 +4,8 @@ declare(strict_types = 1);
 
 namespace Lingoda\LangfuseBundle\Tracing;
 
+use Lingoda\AiSdk\Decision\Answer;
+use Lingoda\AiSdk\Decision\DecisionResult;
 use Lingoda\AiSdk\Prompt\Conversation;
 use Lingoda\AiSdk\Prompt\Prompt;
 use Lingoda\AiSdk\Result\BinaryResult;
@@ -43,7 +45,7 @@ final readonly class TraceManager implements TraceManagerInterface
     /**
      * @throws \Throwable
      */
-    public function trace(string $name, array $metadata, string|Prompt|Conversation $input, callable $callable): ResultInterface
+    public function trace(string $name, array $metadata, string|array|Prompt|Conversation $input, callable $callable, bool $recordContent = true): ResultInterface
     {
         if (!$this->shouldTrace()) {
             return $callable();
@@ -64,7 +66,12 @@ final readonly class TraceManager implements TraceManagerInterface
             throw $e;
         } finally {
             $duration = $this->calculateDuration($startTime);
-            $traceData = $this->buildTraceData($name, $metadata, $input, $result, $duration, $error);
+            $traceData = $this->buildTraceData($name, $metadata, $input, $result, $duration, $error, $recordContent);
+            // Async flushing sends later: keep when the operation actually ran
+            $traceData['started_at'] = (float) $startTime->format('U.u');
+            // Fixed here, so a retried async flush sends the same observation instead of a duplicate
+            $traceData['trace_id'] = bin2hex(random_bytes(16));
+            $traceData['span_id'] = bin2hex(random_bytes(8));
 
             // Delegate to flush service (sync or async)
             $usage = $result instanceof ResultInterface ? $result->getUsage() : null;
@@ -86,29 +93,33 @@ final readonly class TraceManager implements TraceManagerInterface
      * Build trace data for flushing.
      *
      * @param array<string, mixed> $metadata
+     * @param string|array<string, mixed>|Prompt|Conversation $input
      *
      * @return TraceData Trace data structure
      */
     private function buildTraceData(
         string $name,
         array $metadata,
-        string|Prompt|Conversation $input,
+        string|array|Prompt|Conversation $input,
         mixed $result,
         float $duration,
-        ?\Throwable $error
+        ?\Throwable $error,
+        bool $recordContent
     ): array {
         $traceData = [
             'name' => $name,
             'tags' => [$this->environment],
             'environment' => $this->environment,
             'metadata' => $metadata,
-            'input' => $this->serializeInput($input),
+            'input' => $recordContent ? $this->serializeInput($input) : ['type' => 'redacted'],
             'duration' => $duration,
             'status' => $error ? 'error' : 'success',
         ];
 
         if ($result instanceof ResultInterface) {
-            $traceData['output'] = $this->extractOutput($result);
+            if ($recordContent) {
+                $traceData['output'] = $this->extractOutput($result);
+            }
 
             // Extract actual model from result metadata (overrides requested model)
             $resultMetadata = $result->getMetadata();
@@ -124,7 +135,8 @@ final readonly class TraceManager implements TraceManagerInterface
         }
 
         if ($error !== null) {
-            $traceData['error'] = $error->getMessage();
+            // Without content only the exception class is kept: provider errors can quote the input
+            $traceData['error'] = $recordContent ? $error->getMessage() : $error::class;
         }
 
         return $traceData;
@@ -153,12 +165,18 @@ final readonly class TraceManager implements TraceManagerInterface
     /**
      * Serialize input data for Langfuse tracing.
      *
+     * @param string|array<string, mixed>|Prompt|Conversation $input
+     *
      * @return InputData
      */
-    private function serializeInput(string|Prompt|Conversation $input): array
+    private function serializeInput(string|array|Prompt|Conversation $input): array
     {
         if (is_string($input)) {
             return ['type' => 'string', 'content' => $input];
+        }
+
+        if (is_array($input)) {
+            return ['type' => 'request', 'content' => $input];
         }
 
         return [
@@ -197,7 +215,11 @@ final readonly class TraceManager implements TraceManagerInterface
             $result instanceof BinaryResult => [
                 'type' => 'binary',
                 'mime_type' => $result->getMimeType(),
-                'size' => mb_strlen($result->getContent()),
+                'size' => mb_strlen($result->getContent(), '8bit'),
+            ],
+            $result instanceof DecisionResult => [
+                'type' => 'decision',
+                'answers' => array_map(self::answer(...), $result->getContent()),
             ],
             $result instanceof StreamResult => [
                 'type' => 'stream',
@@ -208,5 +230,23 @@ final readonly class TraceManager implements TraceManagerInterface
                 'content' => $result->getContent(),
             ],
         };
+    }
+
+    /**
+     * The fields that answer type carries, as Langfuse shows them for its own Jev integration.
+     *
+     * @return array<string, mixed>
+     */
+    private static function answer(Answer $answer): array
+    {
+        return array_filter([
+            'type' => $answer->type,
+            'probability' => $answer->probability,
+            'choice' => $answer->choice,
+            'score' => $answer->score,
+            'legend' => $answer->legend,
+            'probabilities' => $answer->probabilities,
+            'confidence' => $answer->confidence,
+        ], static fn (mixed $value): bool => $value !== null && $value !== []);
     }
 }

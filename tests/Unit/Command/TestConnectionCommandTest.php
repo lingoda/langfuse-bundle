@@ -4,181 +4,86 @@ declare(strict_types = 1);
 
 namespace Lingoda\LangfuseBundle\Tests\Unit\Command;
 
-use Lingoda\LangfuseBundle\Client\TraceClient;
+use Lingoda\LangfuseBundle\Client\LangfuseConnection;
 use Lingoda\LangfuseBundle\Command\TestConnectionCommand;
-use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Tester\CommandTester;
+use Symfony\Component\HttpClient\Exception\TransportException;
+use Symfony\Component\HttpClient\MockHttpClient;
+use Symfony\Component\HttpClient\Response\MockResponse;
 
 final class TestConnectionCommandTest extends TestCase
 {
-    private TraceClient&MockObject $mockClient;
-    private TestConnectionCommand $command;
-    private CommandTester $commandTester;
+    private LangfuseConnection $connection;
 
     protected function setUp(): void
     {
-        $this->mockClient = $this->createMock(TraceClient::class);
-        $this->command = new TestConnectionCommand($this->mockClient);
-        $this->commandTester = new CommandTester($this->command);
+        $this->connection = new LangfuseConnection('https://cloud.langfuse.com', 'pk-test', 'sk-test', 12);
     }
 
-    public function testCommandName(): void
+    public function testCommandNameAndDescription(): void
     {
-        self::assertEquals('langfuse:test-connection', $this->command->getName());
+        $command = new TestConnectionCommand($this->connection, new MockHttpClient());
+
+        self::assertSame('langfuse:test-connection', $command->getName());
+        self::assertSame('Test connection to Langfuse API', $command->getDescription());
     }
 
-    public function testCommandDescription(): void
+    public function testSuccessfulConnectionIsAnAuthenticatedRead(): void
     {
-        self::assertEquals('Test connection to Langfuse API', $this->command->getDescription());
+        $requests = [];
+        $httpClient = new MockHttpClient(static function (string $method, string $url, array $options) use (&$requests): MockResponse {
+            $requests[] = [$method, $url, $options];
+
+            return new MockResponse('{"data": []}', ['http_code' => 200]);
+        });
+
+        $tester = new CommandTester(new TestConnectionCommand($this->connection, $httpClient));
+
+        self::assertSame(Command::SUCCESS, $tester->execute([]));
+        self::assertStringContainsString('Attempting to connect to https://cloud.langfuse.com', $tester->getDisplay());
+        self::assertStringContainsString('Successfully connected to Langfuse API!', $tester->getDisplay());
+
+        self::assertCount(1, $requests);
+        [$method, $url, $options] = $requests[0];
+        self::assertSame('GET', $method);
+        self::assertSame('https://cloud.langfuse.com/api/public/projects', $url);
+        self::assertContains('Authorization: Basic cGstdGVzdDpzay10ZXN0', $options['headers']);
+        self::assertSame(12.0, (float) $options['timeout']);
     }
 
-    public function testSuccessfulConnection(): void
+    public function testRejectedKeysFail(): void
     {
-        $this->mockClient
-            ->expects(self::once())
-            ->method('testConnection')
-            ->willReturn(true)
-        ;
+        $tester = new CommandTester(new TestConnectionCommand($this->connection, new MockHttpClient(new MockResponse('', ['http_code' => 401]))));
 
-        $exitCode = $this->commandTester->execute([]);
-
-        self::assertEquals(Command::SUCCESS, $exitCode);
-
-        $output = $this->commandTester->getDisplay();
-        self::assertStringContainsString('Testing Langfuse Connection', $output);
-        self::assertStringContainsString('Attempting to connect to Langfuse API...', $output);
-        self::assertStringContainsString('Successfully connected to Langfuse API!', $output);
+        self::assertSame(Command::FAILURE, $tester->execute([]));
+        self::assertStringContainsString('Failed to connect to Langfuse API (HTTP 401)', $tester->getDisplay());
     }
 
-    public function testFailedConnection(): void
+    public function testTransportErrorFails(): void
     {
-        $this->mockClient
-            ->expects(self::once())
-            ->method('testConnection')
-            ->willReturn(false)
-        ;
+        $httpClient = new MockHttpClient(static fn () => throw new TransportException('Could not resolve host'));
+        $tester = new CommandTester(new TestConnectionCommand($this->connection, $httpClient));
 
-        $exitCode = $this->commandTester->execute([]);
-
-        self::assertEquals(Command::FAILURE, $exitCode);
-
-        $output = $this->commandTester->getDisplay();
-        self::assertStringContainsString('Testing Langfuse Connection', $output);
-        self::assertStringContainsString('Attempting to connect to Langfuse API...', $output);
-        self::assertStringContainsString('Failed to connect to Langfuse API', $output);
-        self::assertStringNotContainsString('Successfully connected', $output);
+        self::assertSame(Command::FAILURE, $tester->execute([]));
+        self::assertStringContainsString('Connection failed: Could not resolve host', $tester->getDisplay());
+        self::assertStringNotContainsString('Exception:', $tester->getDisplay());
     }
 
-    public function testConnectionThrowsException(): void
+    public function testVerboseOutputNamesTheException(): void
     {
-        $exception = new \RuntimeException('Connection timeout');
+        $httpClient = new MockHttpClient(static fn () => throw new TransportException('Could not resolve host'));
+        $tester = new CommandTester(new TestConnectionCommand($this->connection, $httpClient));
 
-        $this->mockClient
-            ->expects(self::once())
-            ->method('testConnection')
-            ->willThrowException($exception)
-        ;
+        $tester->execute([], ['verbosity' => OutputInterface::VERBOSITY_VERBOSE]);
 
-        $exitCode = $this->commandTester->execute([]);
-
-        self::assertEquals(Command::FAILURE, $exitCode);
-
-        $output = $this->commandTester->getDisplay();
-        self::assertStringContainsString('Testing Langfuse Connection', $output);
-        self::assertStringContainsString('Connection failed: Connection timeout', $output);
-        self::assertStringNotContainsString('Successfully connected', $output);
+        self::assertStringContainsString('Exception: ' . TransportException::class, $tester->getDisplay());
     }
 
-    public function testConnectionExceptionHandling(): void
+    public function testDefaultsToItsOwnHttpClient(): void
     {
-        $exception = new \RuntimeException('Connection timeout');
-
-        $this->mockClient
-            ->expects(self::once())
-            ->method('testConnection')
-            ->willThrowException($exception)
-        ;
-
-        $exitCode = $this->commandTester->execute([]);
-
-        self::assertEquals(Command::FAILURE, $exitCode);
-
-        $output = $this->commandTester->getDisplay();
-        self::assertStringContainsString('Connection failed: Connection timeout', $output);
-        self::assertStringContainsString('Testing Langfuse Connection', $output);
-    }
-
-    public function testConnectionWithDifferentExceptionTypes(): void
-    {
-        $exception = new \InvalidArgumentException('Invalid API key');
-
-        $this->mockClient
-            ->expects(self::once())
-            ->method('testConnection')
-            ->willThrowException($exception)
-        ;
-
-        $exitCode = $this->commandTester->execute([]);
-
-        self::assertEquals(Command::FAILURE, $exitCode);
-
-        $output = $this->commandTester->getDisplay();
-        self::assertStringContainsString('Connection failed: Invalid API key', $output);
-    }
-
-    public function testCommandOutput(): void
-    {
-        $this->mockClient
-            ->expects(self::once())
-            ->method('testConnection')
-            ->willReturn(true)
-        ;
-
-        $this->commandTester->execute([]);
-
-        $output = $this->commandTester->getDisplay();
-
-        // Verify output structure
-        self::assertStringContainsString('Testing Langfuse Connection', $output);
-        self::assertStringContainsString('Attempting to connect', $output);
-        self::assertStringContainsString('Successfully connected', $output);
-    }
-
-    public function testCommandProducesOutput(): void
-    {
-        $this->mockClient
-            ->expects(self::once())
-            ->method('testConnection')
-            ->willReturn(true)
-        ;
-
-        $exitCode = $this->commandTester->execute([]);
-
-        self::assertEquals(Command::SUCCESS, $exitCode);
-
-        // Command should produce output
-        $output = $this->commandTester->getDisplay();
-        self::assertNotEmpty($output);
-        self::assertStringContainsString('Testing Langfuse Connection', $output);
-    }
-
-    public function testCommandWithEmptyExceptionMessage(): void
-    {
-        $exception = new \RuntimeException('');
-
-        $this->mockClient
-            ->expects(self::once())
-            ->method('testConnection')
-            ->willThrowException($exception)
-        ;
-
-        $exitCode = $this->commandTester->execute([]);
-
-        self::assertEquals(Command::FAILURE, $exitCode);
-
-        $output = $this->commandTester->getDisplay();
-        self::assertStringContainsString('Connection failed:', $output);
+        self::assertInstanceOf(TestConnectionCommand::class, new TestConnectionCommand($this->connection));
     }
 }

@@ -16,3 +16,37 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 
 - PromptRegistryInterface missing getCompiled method
+
+## [2.0.0]
+
+### Added
+
+- Decision tracing: `DecisionPlatformInterface` (TypeSafe Jev, registered by ai-bundle) is decorated when present. A decision is a generation named `typesafe-system-one` with the request `{state, model, questions}` as input and the typed answers as output, the same shape as Langfuse's own TypeSafe integration.
+- The single-provider platforms ai-bundle registers (`openaiPlatform`, `bedrockPlatform`, ...) are traced too, not only the main `PlatformInterface`.
+- `ask()` option `trace_content: false`: records name, model, provider, usage, duration and status, but no input, output or error text.
+- `ask()` option `langfuse_prompt` with `PromptRegistryInterface::reference()` (`PromptReference`): links the generation to the Langfuse prompt version.
+- Cached and reasoning token counts are sent with the usage.
+- `ask()` options `langfuse_session_id` and `langfuse_user_id`: group traces into a Langfuse session and attribute them to a user.
+- `tracing.export_timeout` (default 3 seconds): how long sending a trace may take, separate from `connection.timeout` (prompt API). Synchronous tracing blocks the traced call at most this long when Langfuse is slow or down; before, it could block for the full 30-second connection timeout.
+- Langfuse v4 ingestion: traces are sent as OpenTelemetry spans (OTLP/HTTP JSON) to `/api/public/otel/v1/traces` with `x-langfuse-ingestion-version: 4` (`OtlpTraceExporter`, `LangfuseConnection`). The legacy `/api/public/ingestion` endpoint, served only until November 16, 2026, is no longer used.
+- `SyncTraceFlusher::send()`, which throws instead of swallowing failures.
+
+### Changed
+
+- Requires PHP ^8.4, Symfony ^7.4|^8.0, `lingoda/ai-bundle` ^2.0 and `lingoda/ai-sdk` ^2.1. `dropsolid/langfuse-php-sdk` is no longer used.
+- `TraceClient` is removed (it wrapped dropsolid's legacy ingestion). Trace custom operations through `TraceManagerInterface`.
+- `connection.retry` is deprecated and ignored: synchronous tracing never retries, async flushing is retried by Messenger.
+- `langfuse:test-connection` checks the host and keys with an authenticated `GET /api/public/projects` instead of writing a test trace.
+- `TraceManagerInterface::trace()` also accepts an array input (a structured request such as a decision) and takes a fifth argument `bool $recordContent = true`. Custom implementations must adopt the new signature.
+- Async flushing: `FlushLangfuseTraceHandler` calls `SyncTraceFlusher::send()`, so a failed flush is retried by Messenger (transport errors, 429, 5xx) and ends in the failure transport after the last retry; a trace Langfuse rejects (other 4xx) goes there at once. Trace and span ids are fixed when the trace is built, so a retry overwrites instead of duplicating. Before, every failure was swallowed and the trace lost. Use `trace_content: false` for calls whose content must not be stored there.
+- A failed `ask()` or `decide()` is still a generation: the requested model is recorded up front (the model the result reports replaces it on success), so failures carry the model, level `ERROR` and the prompt link. It is sent with zero usage, so Langfuse does not infer tokens from the input and bill a call that never reached the model.
+- `PromptRegistry::has()` looks up the prompt like `get()` (cache, Langfuse, fallback storage) instead of the fallback storage only.
+- The default async message bus is `messenger.default_bus` everywhere (one code path used `messenger.bus.default`).
+- Errors are sent as observation level `ERROR` with the message as status message.
+
+### Fixed
+
+- A configuration without a `tracing` block no longer fails the container build: its defaults (`enabled: true`, `sampling_rate: 1.0`) now apply.
+- Apps without `symfony/messenger` can boot the bundle: the async handler is tagged `messenger.message_handler` instead of carrying `#[AsMessageHandler]`, whose missing class broke the container build. Enabling `tracing.async_flush` without Messenger fails with the `composer require` command.
+- Binary output size is counted in bytes, not characters.
+- Attachment metadata from ai-sdk 2 conversations fits the trace input type (PHPStan).

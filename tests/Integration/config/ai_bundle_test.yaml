@@ -1,0 +1,36 @@
+framework:
+    test: true
+    secret: 'test'
+    http_client: ~
+
+services:
+    # Stand in for app services injecting these
+    app.decisions:
+        alias: Lingoda\AiSdk\Decision\DecisionPlatformInterface
+        public: true
+    app.platform:
+        alias: Lingoda\AiSdk\PlatformInterface
+        public: true
+    app.openai_platform:
+        alias: openaiPlatform
+        public: true
+
+lingoda_ai:
+    providers:
+        openai:
+            api_key: 'test-openai-key'
+            organization: ''
+        typesafe:
+            api_key: 'test-typesafe-key'
+    logging:
+        enabled: false
+    rate_limiting:
+        enabled: false
+
+lingoda_langfuse:
+    connection:
+        public_key: 'pk-test'
+        secret_key: 'sk-test'
+    prompts:
+        fallback:
+            enabled: false

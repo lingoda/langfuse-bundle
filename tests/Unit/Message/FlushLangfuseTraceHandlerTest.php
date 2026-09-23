@@ -5,12 +5,16 @@ declare(strict_types = 1);
 namespace Lingoda\LangfuseBundle\Tests\Unit\Message;
 
 use Lingoda\AiSdk\Result\Usage;
+use Lingoda\LangfuseBundle\Exception\LangfuseException;
 use Lingoda\LangfuseBundle\Message\FlushLangfuseTrace;
 use Lingoda\LangfuseBundle\Message\FlushLangfuseTraceHandler;
 use Lingoda\LangfuseBundle\Tracing\SyncTraceFlusher;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Messenger\Exception\UnrecoverableMessageHandlingException;
 
 final class FlushLangfuseTraceHandlerTest extends TestCase
 {
@@ -47,7 +51,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, $usage)
         ;
 
@@ -70,7 +74,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, null)
         ;
 
@@ -96,7 +100,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, null)
         ;
 
@@ -119,7 +123,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, null)
         ;
 
@@ -152,7 +156,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->willThrowException($exception)
         ;
 
@@ -188,7 +192,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->willThrowException($exception)
         ;
 
@@ -231,7 +235,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, $usage)
         ;
 
@@ -247,7 +251,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
         ;
 
         // Should not throw exception with NullLogger
@@ -266,7 +270,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, null)
         ;
 
@@ -289,7 +293,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
         ;
 
         $this->mockSyncFlusher
-            ->method('flush')
+            ->method('send')
             ->willReturnCallback(function () use (&$callOrder) {
                 $callOrder[] = 'flush';
             })
@@ -313,7 +317,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
         $capturedData = null;
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->willReturnCallback(function ($traceData) use (&$capturedData) {
                 $capturedData = $traceData;
             })
@@ -322,5 +326,55 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
         $this->handler->__invoke($message);
 
         self::assertEquals($originalTraceData, $capturedData);
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function rejectedStatuses(): iterable
+    {
+        yield 'bad request' => [400];
+        yield 'unauthorized' => [401];
+        yield 'payload too large' => [413];
+    }
+
+    #[DataProvider('rejectedStatuses')]
+    #[Group('messenger')]
+    public function testRejectedTraceIsNotRetried(int $status): void
+    {
+        $rejection = new LangfuseException('Langfuse trace export failed', $status);
+        $this->mockSyncFlusher->method('send')->willThrowException($rejection);
+
+        try {
+            ($this->handler)(new FlushLangfuseTrace(['name' => 'test-trace']));
+            self::fail('Expected UnrecoverableMessageHandlingException');
+        } catch (UnrecoverableMessageHandlingException $e) {
+            self::assertSame($rejection, $e->getPrevious());
+            self::assertSame($status, $e->getCode());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function retryableStatuses(): iterable
+    {
+        yield 'transport' => [0];
+        yield 'rate limited' => [429];
+        yield 'server error' => [503];
+    }
+
+    #[DataProvider('retryableStatuses')]
+    public function testTransientFailureIsRethrownForRetry(int $status): void
+    {
+        $failure = new LangfuseException('Langfuse trace export failed', $status);
+        $this->mockSyncFlusher->method('send')->willThrowException($failure);
+
+        try {
+            ($this->handler)(new FlushLangfuseTrace(['name' => 'test-trace']));
+            self::fail('Expected LangfuseException');
+        } catch (LangfuseException $e) {
+            self::assertSame($failure, $e);
+        }
     }
 }

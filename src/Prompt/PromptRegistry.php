@@ -56,7 +56,25 @@ final readonly class PromptRegistry implements PromptRegistryInterface
 
     public function has(string $name, ?int $version = null, ?string $label = null): bool
     {
-        return $this->storage->exists($name, $version, $label);
+        // Same lookup as get(): cache, then Langfuse, then the fallback storage
+        try {
+            $this->getRawPrompt($name, $version, $label);
+
+            return true;
+        } catch (LangfuseException) {
+            return false;
+        }
+    }
+
+    public function reference(string $name, ?int $version = null, ?string $label = null): PromptReference
+    {
+        $prompt = $this->getRawPrompt($name, $version, $label);
+        $resolvedVersion = $prompt['version'] ?? $version;
+        if (!is_int($resolvedVersion)) {
+            throw new LangfuseException(sprintf('Prompt "%s" has no version to link a generation to', $name));
+        }
+
+        return new PromptReference(is_string($prompt['name'] ?? null) ? $prompt['name'] : $name, $resolvedVersion);
     }
 
     /**

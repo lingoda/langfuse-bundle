@@ -9,7 +9,7 @@ namespace Lingoda\LangfuseBundle\PhpStan;
  *
  * @phpstan-type InputData array{
  *     type: string,
- *     content: array<int|string, array<string, string>|string>|string,
+ *     content?: array<mixed>|string,
  *     class?: string
  * }
  *
@@ -19,7 +19,8 @@ namespace Lingoda\LangfuseBundle\PhpStan;
  *     tools?: array<int, array{name: string, arguments: mixed}>,
  *     data?: mixed,
  *     mime_type?: string,
- *     size?: int
+ *     size?: int,
+ *     answers?: array<string, array<string, mixed>>
  * }
  *
  * @phpstan-type TraceData array{
@@ -29,6 +30,9 @@ namespace Lingoda\LangfuseBundle\PhpStan;
  *     metadata: array<string, mixed>,
  *     input: InputData,
  *     duration: float,
+ *     started_at?: float,
+ *     trace_id?: string,
+ *     span_id?: string,
  *     status: 'error'|'success',
  *     output?: OutputData,
  *     usage?: array<string, mixed>,

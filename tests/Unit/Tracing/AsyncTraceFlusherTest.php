@@ -7,11 +7,13 @@ namespace Lingoda\LangfuseBundle\Tests\Unit\Tracing;
 use Lingoda\AiSdk\Result\Usage;
 use Lingoda\LangfuseBundle\Message\FlushLangfuseTrace;
 use Lingoda\LangfuseBundle\Tracing\AsyncTraceFlusher;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 
+#[Group('messenger')]
 final class AsyncTraceFlusherTest extends TestCase
 {
     private MessageBusInterface&MockObject $mockMessageBus;

@@ -13,10 +13,10 @@ A Symfony bundle for integrating with Langfuse, providing AI operation tracing, 
 
 ## Requirements
 
-- PHP 8.3 or higher
-- Symfony 6.4 or 7.0+
-- Lingoda AI Bundle 1.2+ (the bundle decorates the Lingoda AI SDK)
-- Dropsolid Langfuse PHP SDK 1.2+
+- PHP 8.4 or higher
+- Symfony 7.4 or 8.0+
+- Lingoda AI Bundle 2.0+ and Lingoda AI SDK 2.1+ (the bundle decorates the SDK's platforms)
+- Langfuse Cloud or a self-hosted Langfuse on v4 (traces are sent as OpenTelemetry, see [Langfuse v4](#langfuse-v4-ingestion))
 
 ## Installation
 
@@ -43,17 +43,15 @@ lingoda_langfuse:
         public_key: '%env(LANGFUSE_PUBLIC_KEY)%'
         secret_key: '%env(LANGFUSE_SECRET_KEY)%'
         host: '%env(default:LANGFUSE_HOST:https://cloud.langfuse.com)%'
-        timeout: 30
-        retry:
-            max_attempts: 3
-            delay: 1000
+        timeout: 30 # prompt API requests
 
     tracing:
         enabled: true
         sampling_rate: 1.0
+        export_timeout: 3
         async_flush:
             enabled: false
-            message_bus: 'messenger.bus.default'
+            message_bus: 'messenger.default_bus'
 
     prompts:
         caching:
@@ -108,6 +106,44 @@ class ContentService
 - **Proper Langfuse generation structure for cost tracking**
 - Error handling and status tracking
 
+Every platform an app can inject is traced: the main `PlatformInterface`, and the single-provider platforms ai-bundle registers (`$openaiPlatform`, `$bedrockPlatform`, ...). Attachments appear in the input as `{mime, size}` only; their bytes and filenames never reach Langfuse.
+
+#### Keeping personal data out of Langfuse
+
+Pass `trace_content: false` to keep a call's content out of Langfuse:
+
+```php
+$result = $this->platform->ask($conversation, 'amazon.nova-2-lite-v1:0', ['trace_content' => false]);
+```
+
+The trace still records the name, model, provider, usage, duration and status. The input is recorded as `{type: redacted}`, there is no output, and an error is recorded as its exception class only (provider errors can quote the input). Nothing sensitive reaches the Messenger message or the failure transport either.
+
+#### Linking generations to Langfuse prompts
+
+```php
+$conversation = $this->prompts->getCompiled('mnr-voucher-fields', $parameters, version: 1);
+$result = $this->platform->ask($conversation, $model, ['langfuse_prompt' => $this->prompts->reference('mnr-voucher-fields', 1)]);
+```
+
+`PromptRegistryInterface::reference()` resolves the actual version (also for a label or the latest), and the generation is linked to that prompt version in Langfuse.
+
+#### Sessions and users
+
+```php
+$result = $this->platform->ask($conversation, $model, ['langfuse_session_id' => $runId, 'langfuse_user_id' => 'reporting-cron']);
+```
+
+Groups traces into a Langfuse session and attributes them to a user, so session cost and filters work. Pass ids, never names or e-mail addresses. `trace_name`, `trace_content`, `langfuse_prompt`, `langfuse_session_id` and `langfuse_user_id` are removed before the call reaches the provider.
+
+#### What a trace measures
+
+- The duration covers the whole traced call, including any wait for ai-bundle's rate limiter: it is the latency the caller saw, not only the provider's response time.
+- A trace that exceeds Langfuse's request size limit (a very long conversation) is rejected with HTTP 413; the async handler sends it to the failure transport without retrying, and the synchronous flusher logs and drops it. Keep huge documents in attachments, which are recorded as `{mime, size}` only.
+
+### Decision Tracing (TypeSafe Jev)
+
+When ai-bundle registers TypeSafe Jev (`providers.typesafe`), `DecisionPlatformInterface::decide()` is traced the way Langfuse's own [TypeSafe integration](https://langfuse.com/integrations/model-providers/typesafe) records it: a generation named `typesafe-system-one`, the model TypeSafe answered with (e.g. `jev-1.13.0` for `jev-latest`), the request `{state, model, questions}` as input, the typed answers with their probabilities as output, and the input tokens as usage. [Jev as a judge](https://langfuse.com/docs/evaluation/evaluation-methods/jev-as-a-judge) evaluators run inside Langfuse on these traces and need nothing from this bundle.
+
 ### Usage Metrics and Cost Tracking
 
 The bundle automatically extracts and sends usage metrics in the proper format for Langfuse:
@@ -115,6 +151,7 @@ The bundle automatically extracts and sends usage metrics in the proper format f
 - **Prompt tokens**: Input token count
 - **Completion tokens**: Output token count
 - **Total tokens**: Combined count
+- **Cached and reasoning tokens**: when the provider reports them, as `input_cached_tokens` and `output_reasoning_tokens`
 - **Model information**: For accurate cost calculation
 - **Proper generation structure**: Trace → Generation hierarchy
 
@@ -151,7 +188,7 @@ lingoda_langfuse:
         sampling_rate: 1.0
         async_flush:
             enabled: true
-            message_bus: 'messenger.bus.default'  # optional, defaults to messenger.bus.default
+            message_bus: 'messenger.default_bus'  # optional, defaults to messenger.default_bus
 ```
 
 #### 3. Run Message Consumers
@@ -237,56 +274,35 @@ lingoda_langfuse:
                 service: 'prompts.storage'
 ```
 
-### Direct TraceClient Usage
+### Manual Tracing
 
-For manual tracing beyond automatic AI operations:
+For operations the decorators do not cover, trace them through `TraceManagerInterface`: the same path, sampling, `trace_content` handling and flushing as the automatic traces.
 
 ```php
-use Lingoda\LangfuseBundle\Client\TraceClient;
+use Lingoda\AiSdk\Result\TextResult;
+use Lingoda\LangfuseBundle\Tracing\TraceManagerInterface;
 
-class AnalyticsService
+class SummaryService
 {
     public function __construct(
-        private TraceClient $traceClient
+        private TraceManagerInterface $traceManager
     ) {}
 
-    public function processUserAction(User $user, string $action): void
+    public function summarize(string $text): TextResult
     {
-        $trace = $this->traceClient->trace([
-            'name' => 'user-action',
-            'userId' => $user->getId(),
-            'metadata' => ['action' => $action],
-            'input' => ['timestamp' => time()]
-        ]);
-
-        // For AI operations, create a generation
-        if ($action === 'ai-query') {
-            $generation = $trace->createGeneration(
-                name: 'ai-completion',
-                model: 'gpt-4',
-                input: ['query' => 'user question']
-            );
-
-            // Set usage details for cost tracking
-            $generation->withUsageDetails([
-                'prompt_tokens' => 15,
-                'completion_tokens' => 8,
-                'total_tokens' => 23
-            ]);
-
-            $generation->end(['output' => 'AI response']);
-        }
-
-        $trace->end([
-            'output' => ['status' => 'completed'],
-            'statusMessage' => 'Action processed successfully'
-        ]);
-
-        // Manually flush if needed (automatic in most cases)
-        $this->traceClient->flush();
+        return $this->traceManager->trace(
+            'custom-summary',
+            ['model' => 'my-local-model'], // a model makes it a generation
+            $text,
+            fn () => $this->runSummary($text) // returns a ResultInterface
+        );
     }
 }
 ```
+
+### Langfuse v4 Ingestion
+
+Traces are sent to Langfuse's OpenTelemetry endpoint (`POST /api/public/otel/v1/traces`, OTLP/HTTP JSON, header `x-langfuse-ingestion-version: 4`), the [v4 ingestion path](https://langfuse.com/integrations/native/opentelemetry/migration-to-v4). The legacy `/api/public/ingestion` endpoint is served only until November 16, 2026 and is not used. Each trace is one root observation, a generation when the result names a model, carrying input, output, usage (`input`, `output`, `total`, `input_cached_tokens`, `output_reasoning_tokens`), model, prompt link, level and metadata as `langfuse.*` attributes. Prompt management uses `GET /api/public/prompts`, which v4 keeps.
 
 ## Configuration Reference
 
@@ -297,15 +313,16 @@ lingoda_langfuse:
         public_key: string              # Required: Langfuse public key
         secret_key: string              # Required: Langfuse secret key
         host: string                    # Default: https://cloud.langfuse.com
-        timeout: int                    # Default: 30 (seconds)
-        retry:
-            max_attempts: int           # Default: 3
-            delay: int                  # Default: 1000 (milliseconds)
+        timeout: int                    # Default: 30 (seconds, prompt API requests)
+        retry:                          # Deprecated since 2.0 and ignored (traces use tracing.export_timeout)
+            max_attempts: int
+            delay: int
 
     # Tracing configuration
     tracing:
         enabled: bool                   # Default: true
         sampling_rate: float            # Default: 1.0 (0.0-1.0)
+        export_timeout: int             # Default: 3 (seconds per trace; synchronous tracing blocks the call this long at most)
         async_flush:
             enabled: bool               # Default: false
             message_bus: string         # Default: 'messenger.default_bus'
@@ -409,7 +426,7 @@ The bundle follows clean architecture principles with focused, single-responsibi
 - **FlushLangfuseTraceHandler**: Processes async messages (delegates to sync flusher)
 - **PromptRegistry**: Manages prompt lifecycle with caching and storage
 - **PromptClient**: Handles API communication with Langfuse
-- **TraceClient**: Direct trace creation and management
+- **OtlpTraceExporter**: Sends each trace to Langfuse's OpenTelemetry endpoint
 
 ### Trace Processing Architecture
 

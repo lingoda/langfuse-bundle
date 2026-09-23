@@ -4,10 +4,8 @@ declare(strict_types = 1);
 
 namespace Lingoda\LangfuseBundle\Tests\Unit\Client;
 
-use Dropsolid\LangFuse\Client;
-use Dropsolid\LangFuse\DTO\ClientConfig;
+use Lingoda\LangfuseBundle\Client\LangfuseConnection;
 use Lingoda\LangfuseBundle\Client\PromptClient;
-use Lingoda\LangfuseBundle\Client\TraceClient;
 use Lingoda\LangfuseBundle\Exception\LangfuseException;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -17,32 +15,18 @@ use Symfony\Contracts\HttpClient\ResponseInterface;
 
 final class PromptClientTest extends TestCase
 {
-    private TraceClient&MockObject $mockTraceClient;
+    private const string AUTHORIZATION = 'Basic cGstdGVzdDpzay10ZXN0'; // pk-test:sk-test
+
+    private LangfuseConnection $connection;
     private HttpClientInterface&MockObject $mockHttpClient;
-    private Client&MockObject $mockClient;
-    private ClientConfig&MockObject $mockConfig;
     private PromptClient $promptClient;
 
     protected function setUp(): void
     {
-        $this->mockTraceClient = $this->createMock(TraceClient::class);
+        $this->connection = new LangfuseConnection('https://api.langfuse.com', 'pk-test', 'sk-test');
         $this->mockHttpClient = $this->createMock(HttpClientInterface::class);
-        $this->mockClient = $this->createMock(Client::class);
-        $this->mockConfig = $this->createMock(ClientConfig::class);
 
-        // Configure mock methods instead of setting readonly properties
-        $this->mockConfig->method('getAuthHeader')->willReturn('Bearer test-token');
-
-        // Create a reflection-based workaround or use property mapping
-        $reflectionConfig = new \ReflectionClass(ClientConfig::class);
-        $hostProperty = $reflectionConfig->getProperty('host');
-        $hostProperty->setAccessible(true);
-        $hostProperty->setValue($this->mockConfig, 'https://api.langfuse.com');
-
-        $this->mockTraceClient->method('getClient')->willReturn($this->mockClient);
-        $this->mockClient->method('getConfig')->willReturn($this->mockConfig);
-
-        $this->promptClient = new PromptClient($this->mockTraceClient, $this->mockHttpClient);
+        $this->promptClient = new PromptClient($this->connection, $this->mockHttpClient);
     }
 
     public function testGetPromptFromAPIWithNameOnly(): void
@@ -66,7 +50,7 @@ final class PromptClientTest extends TestCase
                 [
                     'query' => ['name' => 'test-prompt'],
                     'headers' => [
-                        'Authorization' => 'Bearer test-token',
+                        'Authorization' => self::AUTHORIZATION,
                         'Content-Type' => 'application/json',
                         'Accept' => 'application/json',
                     ],
@@ -252,7 +236,7 @@ final class PromptClientTest extends TestCase
 
     public function testGetPromptFromAPIWithoutHttpClient(): void
     {
-        $promptClient = new PromptClient($this->mockTraceClient);
+        $promptClient = new PromptClient($this->connection);
 
         $this->expectException(LangfuseException::class);
         $this->expectExceptionMessage('HTTP client not configured for prompt management');
@@ -262,17 +246,7 @@ final class PromptClientTest extends TestCase
 
     public function testGetPromptFromAPIHandlesHostWithTrailingSlash(): void
     {
-        // Create new mock config with trailing slash
-        $mockConfig = $this->createMock(ClientConfig::class);
-        $mockConfig->method('getAuthHeader')->willReturn('Bearer test-token');
-
-        // Use reflection to set readonly property for test
-        $reflectionConfig = new \ReflectionClass(ClientConfig::class);
-        $hostProperty = $reflectionConfig->getProperty('host');
-        $hostProperty->setAccessible(true);
-        $hostProperty->setValue($mockConfig, 'https://api.langfuse.com/');
-
-        $this->mockClient->method('getConfig')->willReturn($mockConfig);
+        $promptClient = new PromptClient(new LangfuseConnection('https://api.langfuse.com/', 'pk-test', 'sk-test'), $this->mockHttpClient);
 
         $promptData = ['name' => 'test'];
         $mockResponse = $this->createMock(ResponseInterface::class);
@@ -289,7 +263,7 @@ final class PromptClientTest extends TestCase
             ->willReturn($mockResponse)
         ;
 
-        $result = $this->promptClient->getPromptFromAPI('test');
+        $result = $promptClient->getPromptFromAPI('test');
 
         self::assertEquals($promptData, $result);
     }

@@ -8,6 +8,7 @@ use Lingoda\LangfuseBundle\LingodaLangfuseBundle;
 use Lingoda\LangfuseBundle\Storage\StorageFactory;
 use Lingoda\LangfuseBundle\Tracing\AsyncTraceFlusher;
 use Lingoda\LangfuseBundle\Tracing\TraceFlusherInterface;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
@@ -17,6 +18,7 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 final class LingodaLangfuseBundleTest extends TestCase
 {
@@ -58,6 +60,9 @@ final class LingodaLangfuseBundleTest extends TestCase
         self::assertEquals('test-key', $processedConfig['connection']['public_key']);
         self::assertEquals('test-secret', $processedConfig['connection']['secret_key']);
         self::assertEquals('https://cloud.langfuse.com', $processedConfig['connection']['host']);
+        // Without a tracing block its defaults still apply
+        self::assertTrue($processedConfig['tracing']['enabled']);
+        self::assertSame(3, $processedConfig['tracing']['export_timeout']);
         self::assertEquals(30, $processedConfig['connection']['timeout']);
 
         // Test with full configuration to exercise more paths
@@ -272,6 +277,7 @@ final class LingodaLangfuseBundleTest extends TestCase
         $this->bundle->loadExtension($config, $mockContainer, $mockBuilder);
     }
 
+    #[Group('messenger')]
     public function testLoadExtensionWithAsyncFlushEnabled(): void
     {
         $config = [
@@ -370,7 +376,7 @@ final class LingodaLangfuseBundleTest extends TestCase
         self::assertArrayHasKey('tracing', $result);
         self::assertArrayHasKey('async_flush', $result['tracing']);
         self::assertFalse($result['tracing']['async_flush']['enabled']);
-        self::assertEquals('messenger.bus.default', $result['tracing']['async_flush']['message_bus']);
+        self::assertEquals('messenger.default_bus', $result['tracing']['async_flush']['message_bus']);
 
         self::assertArrayHasKey('prompts', $result);
         self::assertArrayHasKey('caching', $result['prompts']);
@@ -760,5 +766,40 @@ final class LingodaLangfuseBundleTest extends TestCase
         ;
 
         $this->bundle->loadExtension($config, $mockContainer, $mockBuilder);
+    }
+
+    public function testExportTimeoutMustBePositive(): void
+    {
+        $treeBuilder = new TreeBuilder('lingoda_langfuse');
+        $this->bundle->configure(new DefinitionConfigurator($treeBuilder, $this->createMock(DefinitionFileLoader::class), __DIR__, 'test.php'));
+        $tree = $treeBuilder->buildTree();
+
+        $this->expectException(InvalidConfigurationException::class);
+
+        $tree->finalize($tree->normalize([
+            'connection' => ['public_key' => 'pk', 'secret_key' => 'sk'],
+            'tracing' => ['export_timeout' => 0],
+        ]));
+    }
+
+    public function testAsyncFlushWithoutMessengerFailsWithTheInstallHint(): void
+    {
+        if (interface_exists(MessageBusInterface::class)) {
+            self::markTestSkipped('Runs in the CI job without symfony/messenger.');
+        }
+
+        $builder = new ContainerBuilder();
+        foreach (['kernel.environment' => 'test', 'kernel.debug' => true, 'kernel.build_dir' => sys_get_temp_dir(), 'kernel.cache_dir' => sys_get_temp_dir(), 'kernel.project_dir' => __DIR__] as $name => $value) {
+            $builder->setParameter($name, $value);
+        }
+
+        $this->expectException(\LogicException::class);
+        $this->expectExceptionMessage('composer require symfony/messenger');
+
+        $this->bundle->getContainerExtension()?->load([[
+            'connection' => ['public_key' => 'pk', 'secret_key' => 'sk'],
+            'tracing' => ['async_flush' => ['enabled' => true]],
+            'prompts' => ['fallback' => ['enabled' => false]],
+        ]], $builder);
     }
 }

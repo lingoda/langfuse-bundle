@@ -16,6 +16,7 @@ use Lingoda\AiSdk\Result\BinaryResult;
 use Lingoda\AiSdk\Result\StreamResult;
 use Lingoda\AiSdk\Result\TextResult;
 use Lingoda\LangfuseBundle\Platform\LangfusePlatformDecorator;
+use Lingoda\LangfuseBundle\Prompt\PromptReference;
 use Lingoda\LangfuseBundle\Tracing\TraceManagerInterface;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -48,6 +49,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
         $mockProvider = $this->createMock(ProviderInterface::class);
         $mockProvider->method('getName')->willReturn('openai');
         $mockModel->method('getProvider')->willReturn($mockProvider);
+        $mockModel->method('getId')->willReturn('resolved-model');
 
         $this->mockPlatform
             ->expects(self::once())
@@ -61,7 +63,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
             ->method('trace')
             ->with(
                 'ai-completion',
-                ['provider' => 'openai'],
+                ['provider' => 'openai', 'model' => 'resolved-model'],
                 $input,
                 self::isInstanceOf(\Closure::class)
             )
@@ -89,6 +91,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
         $mockProvider = $this->createMock(ProviderInterface::class);
         $mockProvider->method('getName')->willReturn('anthropic');
         $mockModel->method('getProvider')->willReturn($mockProvider);
+        $mockModel->method('getId')->willReturn('resolved-model');
 
         $this->mockPlatform
             ->expects(self::once())
@@ -102,7 +105,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
             ->method('trace')
             ->with(
                 'ai-completion',
-                ['provider' => 'anthropic'],
+                ['provider' => 'anthropic', 'model' => 'resolved-model'],
                 $prompt,
                 self::isInstanceOf(\Closure::class)
             )
@@ -131,6 +134,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
         $mockProvider = $this->createMock(ProviderInterface::class);
         $mockProvider->method('getName')->willReturn('anthropic');
         $mockModel->method('getProvider')->willReturn($mockProvider);
+        $mockModel->method('getId')->willReturn('resolved-model');
 
         $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
 
@@ -139,7 +143,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
             ->method('trace')
             ->with(
                 'ai-completion',
-                ['provider' => 'anthropic'],
+                ['provider' => 'anthropic', 'model' => 'resolved-model'],
                 $conversation,
                 self::isInstanceOf(\Closure::class)
             )
@@ -166,6 +170,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
         $mockProvider = $this->createMock(ProviderInterface::class);
         $mockProvider->method('getName')->willReturn('openai');
         $mockModel->method('getProvider')->willReturn($mockProvider);
+        $mockModel->method('getId')->willReturn('resolved-model');
 
         $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
 
@@ -174,7 +179,7 @@ final class LangfusePlatformDecoratorTest extends TestCase
             ->method('trace')
             ->with(
                 'custom-operation',
-                ['provider' => 'openai'],
+                ['provider' => 'openai', 'model' => 'resolved-model'],
                 $input,
                 self::isInstanceOf(\Closure::class)
             )
@@ -435,5 +440,101 @@ final class LangfusePlatformDecoratorTest extends TestCase
         ;
 
         $this->decorator->textToSpeech($input, $options);
+    }
+
+    public function testTracingOptionsAreStrippedAndApplied(): void
+    {
+        $result = $this->createMock(TextResult::class);
+        $mockModel = $this->createMock(ModelInterface::class);
+        $mockProvider = $this->createMock(ProviderInterface::class);
+        $mockProvider->method('getName')->willReturn('AWS Bedrock');
+        $mockModel->method('getProvider')->willReturn($mockProvider);
+        $mockModel->method('getId')->willReturn('resolved-model');
+        $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
+
+        $this->mockTraceManager
+            ->expects(self::once())
+            ->method('trace')
+            ->with(
+                'ai-completion',
+                ['provider' => 'AWS Bedrock', 'model' => 'resolved-model', 'langfuse_prompt' => ['name' => 'mnr-voucher-fields', 'version' => 3]],
+                'voucher',
+                self::isInstanceOf(\Closure::class),
+                false
+            )
+            ->willReturnCallback(fn ($name, $metadata, $input, $callable) => $callable())
+        ;
+        $this->mockPlatform
+            ->expects(self::once())
+            ->method('ask')
+            ->with('voucher', 'amazon.nova-2-lite-v1:0', ['max_tokens' => 1500])
+            ->willReturn($result)
+        ;
+
+        $this->decorator->ask('voucher', 'amazon.nova-2-lite-v1:0', [
+            'max_tokens' => 1500,
+            'trace_content' => false,
+            'langfuse_prompt' => new PromptReference('mnr-voucher-fields', 3),
+        ]);
+    }
+
+    public function testContentIsRecordedByDefault(): void
+    {
+        $mockModel = $this->createMock(ModelInterface::class);
+        $mockModel->method('getProvider')->willReturn($this->createMock(ProviderInterface::class));
+        $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
+
+        $this->mockTraceManager
+            ->expects(self::once())
+            ->method('trace')
+            ->with(self::anything(), self::anything(), self::anything(), self::anything(), true)
+            ->willReturn($this->createMock(TextResult::class))
+        ;
+
+        $this->decorator->ask('hello');
+    }
+
+    public function testInvalidPromptReferenceIsRejected(): void
+    {
+        $mockModel = $this->createMock(ModelInterface::class);
+        $mockModel->method('getProvider')->willReturn($this->createMock(ProviderInterface::class));
+        $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
+        $this->mockTraceManager->expects(self::never())->method('trace');
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->decorator->ask('hello', null, ['langfuse_prompt' => ['name' => 'x', 'version' => 1]]);
+    }
+
+    public function testSessionAndUserIdsAreRecordedAndStripped(): void
+    {
+        $mockModel = $this->createMock(ModelInterface::class);
+        $mockModel->method('getId')->willReturn('resolved-model');
+        $mockModel->method('getProvider')->willReturn($this->createMock(ProviderInterface::class));
+        $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
+
+        $this->mockTraceManager
+            ->expects(self::once())
+            ->method('trace')
+            ->with(
+                'ai-completion',
+                self::callback(static fn (array $metadata): bool => $metadata['langfuse_session_id'] === 'run-42' && $metadata['langfuse_user_id'] === 'cron'),
+            )
+            ->willReturnCallback(fn ($name, $metadata, $input, $callable) => $callable())
+        ;
+        $this->mockPlatform->expects(self::once())->method('ask')->with('hello', null, [])->willReturn($this->createMock(TextResult::class));
+
+        $this->decorator->ask('hello', null, ['langfuse_session_id' => 'run-42', 'langfuse_user_id' => 'cron']);
+    }
+
+    public function testEmptySessionIdIsRejected(): void
+    {
+        $mockModel = $this->createMock(ModelInterface::class);
+        $mockModel->method('getProvider')->willReturn($this->createMock(ProviderInterface::class));
+        $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->decorator->ask('hello', null, ['langfuse_session_id' => '']);
     }
 }

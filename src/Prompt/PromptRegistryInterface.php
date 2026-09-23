@@ -37,9 +37,16 @@ interface PromptRegistryInterface
     public function getCompiled(string $name, array $parameters, ?int $version = null, ?string $label = null, bool $useCache = true): Conversation;
 
     /**
-     * Check if a prompt exists.
+     * Check if a prompt exists: in the cache, in Langfuse, or in the fallback storage.
      */
     public function has(string $name, ?int $version = null, ?string $label = null): bool;
+
+    /**
+     * The prompt at the version Langfuse resolves (latest or the label's), for the ask() option langfuse_prompt.
+     *
+     * @throws LangfuseException When the prompt cannot be loaded or has no version
+     */
+    public function reference(string $name, ?int $version = null, ?string $label = null): PromptReference;
 
     /**
      * Get raw prompt data without deserialization.

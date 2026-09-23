@@ -16,7 +16,7 @@ final class PromptClient
     private const string PROMPTS_ENDPOINT = 'api/public/prompts';
 
     public function __construct(
-        private readonly TraceClient $client,
+        private readonly LangfuseConnection $connection,
         private readonly ?HttpClientInterface $httpClient = null
     ) {
     }
@@ -67,18 +67,15 @@ final class PromptClient
             throw new LangfuseException('HTTP client not configured for prompt management');
         }
 
-        $config = $this->client->getClient()->getConfig();
-        $url = mb_rtrim($config->host, '/') . '/' . mb_ltrim(self::PROMPTS_ENDPOINT, '/');
-
         try {
-            $response = $this->httpClient->request('GET', $url, [
+            $response = $this->httpClient->request('GET', $this->connection->url(self::PROMPTS_ENDPOINT), [
                 'query' => $queryParams,
                 'headers' => [
-                    'Authorization' => $config->getAuthHeader(),
+                    'Authorization' => $this->connection->authorizationHeader(),
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
                 ],
-                'timeout' => 30,
+                'timeout' => $this->connection->timeout,
             ]);
 
             $body = $response->getContent();
