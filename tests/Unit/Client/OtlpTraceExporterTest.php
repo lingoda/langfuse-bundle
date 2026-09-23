@@ -196,6 +196,13 @@ final class OtlpTraceExporterTest extends TestCase
         return $data;
     }
 
+    public function testSubMicrosecondRoundingCarriesIntoTheNextSecond(): void
+    {
+        $span = $this->span($this->traceData(['started_at' => 1789999999.9999996, 'duration' => 0.0]));
+
+        self::assertSame('1790000000000000000', $span['startTimeUnixNano']);
+    }
+
     public function testRetriedTraceKeepsItsIds(): void
     {
         $span = $this->span($this->traceData(['trace_id' => str_repeat('ab', 16), 'span_id' => str_repeat('cd', 8)]));

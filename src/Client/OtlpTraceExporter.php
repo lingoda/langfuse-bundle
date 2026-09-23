@@ -170,21 +170,20 @@ final readonly class OtlpTraceExporter
     }
 
     /**
-     * An OTLP JSON key-value attribute. Lists of strings stay arrays (tags); anything else structured is JSON.
+     * An OTLP JSON key-value attribute. Structured values arrive JSON-encoded already; only tags stay a list.
+     *
+     * @param bool|int|float|string|list<string> $value
      *
      * @return array{key: string, value: array<string, mixed>}
      */
-    private static function attribute(string $key, mixed $value): array
+    private static function attribute(string $key, bool|int|float|string|array $value): array
     {
         $otlpValue = match (true) {
             is_bool($value) => ['boolValue' => $value],
             is_int($value) => ['intValue' => (string) $value],
             is_float($value) => ['doubleValue' => $value],
             is_string($value) => ['stringValue' => $value],
-            is_array($value) && array_is_list($value) && array_filter($value, is_string(...)) === $value => [
-                'arrayValue' => ['values' => array_map(static fn (string $item): array => ['stringValue' => $item], $value)],
-            ],
-            default => ['stringValue' => self::json($value)],
+            default => ['arrayValue' => ['values' => array_map(static fn (string $item): array => ['stringValue' => $item], $value)]],
         };
 
         return ['key' => $key, 'value' => $otlpValue];
