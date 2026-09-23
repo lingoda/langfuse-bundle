@@ -4,6 +4,7 @@ declare(strict_types = 1);
 
 namespace Lingoda\LangfuseBundle;
 
+use Lingoda\LangfuseBundle\DependencyInjection\Compiler\TraceProviderPlatformsPass;
 use Lingoda\LangfuseBundle\PhpStan\Types;
 use Lingoda\LangfuseBundle\Storage\StorageFactory;
 use Lingoda\LangfuseBundle\Tracing\AsyncTraceFlusher;
@@ -14,6 +15,7 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 /**
  * @phpstan-import-type BundleConfig from Types
@@ -48,6 +50,7 @@ class LingodaLangfuseBundle extends AbstractBundle
 
                 // Tracing settings
                 ->arrayNode('tracing')
+                    ->addDefaultsIfNotSet()
                     ->children()
                         ->booleanNode('enabled')->defaultTrue()->end()
                         ->floatNode('sampling_rate')->defaultValue(1.0)->end()
@@ -112,6 +115,13 @@ class LingodaLangfuseBundle extends AbstractBundle
         ;
     }
 
+    public function build(ContainerBuilder $container): void
+    {
+        parent::build($container);
+
+        $container->addCompilerPass(new TraceProviderPlatformsPass());
+    }
+
     /**
      * @param BundleConfig $config
      */
@@ -143,6 +153,13 @@ class LingodaLangfuseBundle extends AbstractBundle
 
         $tracingConfig = $config['tracing'];
         if ($tracingConfig['async_flush']['enabled']) {
+            // Only reachable without symfony/messenger installed
+            // @codeCoverageIgnoreStart
+            if (!interface_exists(MessageBusInterface::class)) {
+                throw new \LogicException('tracing.async_flush needs symfony/messenger. Run "composer require symfony/messenger".');
+            }
+            /** @codeCoverageIgnoreEnd */
+
             $messageBus = $tracingConfig['async_flush']['message_bus'];
             $builder->register(AsyncTraceFlusher::class, AsyncTraceFlusher::class)
                 ->setArguments([
@@ -186,7 +203,7 @@ class LingodaLangfuseBundle extends AbstractBundle
         if (!isset($tracingConfig['async_flush'])) {
             $tracingConfig['async_flush'] = [
                 'enabled' => false,
-                'message_bus' => 'messenger.bus.default',
+                'message_bus' => 'messenger.default_bus',
             ];
         }
         $config['tracing'] = $tracingConfig;

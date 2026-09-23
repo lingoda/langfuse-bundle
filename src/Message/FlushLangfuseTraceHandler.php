@@ -7,13 +7,11 @@ namespace Lingoda\LangfuseBundle\Message;
 use Lingoda\LangfuseBundle\Tracing\SyncTraceFlusher;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
-use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
 /**
  * Handler for asynchronous Langfuse trace flushing.
  * Delegates to SyncTraceFlushService to avoid code duplication.
  */
-#[AsMessageHandler]
 final readonly class FlushLangfuseTraceHandler
 {
     public function __construct(
@@ -34,7 +32,7 @@ final readonly class FlushLangfuseTraceHandler
                 'trace_name' => $traceData['name'] ?? 'unknown',
             ]);
 
-            $this->syncFlushService->flush($traceData, $message->getUsage());
+            $this->syncFlushService->send($traceData, $message->getUsage());
 
             $this->logger->info('Successfully processed async trace flush', [
                 'trace_name' => $traceData['name'] ?? 'unknown',

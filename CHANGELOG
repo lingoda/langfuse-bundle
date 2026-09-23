@@ -16,3 +16,30 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Fixed
 
 - PromptRegistryInterface missing getCompiled method
+
+## [2.0.0]
+
+### Added
+
+- Decision tracing: `DecisionPlatformInterface` (TypeSafe Jev, registered by ai-bundle) is decorated when present. A decision is a generation named `typesafe-system-one` with the request `{state, model, questions}` as input and the typed answers as output, the same shape as Langfuse's own TypeSafe integration.
+- The single-provider platforms ai-bundle registers (`openaiPlatform`, `bedrockPlatform`, ...) are traced too, not only the main `PlatformInterface`.
+- `ask()` option `trace_content: false`: records name, model, provider, usage, duration and status, but no input, output or error text.
+- `ask()` option `langfuse_prompt` with `PromptRegistryInterface::reference()` (`PromptReference`): links the generation to the Langfuse prompt version.
+- Cached and reasoning token counts are sent with the usage.
+- `SyncTraceFlusher::send()` and `TraceClient::createOrFail()` / `flushOrFail()`, which throw instead of swallowing failures.
+
+### Changed
+
+- Requires PHP ^8.4, Symfony ^7.4|^8.0, `lingoda/ai-bundle` ^2.0, `lingoda/ai-sdk` ^2.1 and `dropsolid/langfuse-php-sdk` ^1.3.1.
+- `TraceManagerInterface::trace()` also accepts an array input (a structured request such as a decision) and takes a fifth argument `bool $recordContent = true`. Custom implementations must adopt the new signature.
+- Async flushing: `FlushLangfuseTraceHandler` calls `SyncTraceFlusher::send()`, so a failed flush is retried by Messenger and ends in the failure transport after the last retry. Before, every failure was swallowed and the trace lost. Use `trace_content: false` for calls whose content must not be stored there.
+- `PromptRegistry::has()` looks up the prompt like `get()` (cache, Langfuse, fallback storage) instead of the fallback storage only.
+- The default async message bus is `messenger.default_bus` everywhere (one code path used `messenger.bus.default`).
+- Errors on a generation are sent with level `ERROR` and the message as status message, as dropsolid 1.3 expects.
+
+### Fixed
+
+- A configuration without a `tracing` block no longer fails the container build: its defaults (`enabled: true`, `sampling_rate: 1.0`) now apply.
+- Apps without `symfony/messenger` can boot the bundle: the async handler is tagged `messenger.message_handler` instead of carrying `#[AsMessageHandler]`, whose missing class broke the container build. Enabling `tracing.async_flush` without Messenger fails with the `composer require` command.
+- Binary output size is counted in bytes, not characters.
+- Attachment metadata from ai-sdk 2 conversations fits the trace input type (PHPStan).

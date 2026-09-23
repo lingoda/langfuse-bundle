@@ -47,7 +47,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, $usage)
         ;
 
@@ -70,7 +70,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, null)
         ;
 
@@ -96,7 +96,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, null)
         ;
 
@@ -119,7 +119,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, null)
         ;
 
@@ -152,7 +152,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->willThrowException($exception)
         ;
 
@@ -188,7 +188,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->willThrowException($exception)
         ;
 
@@ -231,7 +231,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, $usage)
         ;
 
@@ -247,7 +247,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
         ;
 
         // Should not throw exception with NullLogger
@@ -266,7 +266,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
 
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->with($traceData, null)
         ;
 
@@ -289,7 +289,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
         ;
 
         $this->mockSyncFlusher
-            ->method('flush')
+            ->method('send')
             ->willReturnCallback(function () use (&$callOrder) {
                 $callOrder[] = 'flush';
             })
@@ -313,7 +313,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
         $capturedData = null;
         $this->mockSyncFlusher
             ->expects(self::once())
-            ->method('flush')
+            ->method('send')
             ->willReturnCallback(function ($traceData) use (&$capturedData) {
                 $capturedData = $traceData;
             })

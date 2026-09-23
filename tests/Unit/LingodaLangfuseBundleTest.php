@@ -370,7 +370,7 @@ final class LingodaLangfuseBundleTest extends TestCase
         self::assertArrayHasKey('tracing', $result);
         self::assertArrayHasKey('async_flush', $result['tracing']);
         self::assertFalse($result['tracing']['async_flush']['enabled']);
-        self::assertEquals('messenger.bus.default', $result['tracing']['async_flush']['message_bus']);
+        self::assertEquals('messenger.default_bus', $result['tracing']['async_flush']['message_bus']);
 
         self::assertArrayHasKey('prompts', $result);
         self::assertArrayHasKey('caching', $result['prompts']);

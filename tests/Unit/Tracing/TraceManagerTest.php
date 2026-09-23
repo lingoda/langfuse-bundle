@@ -4,6 +4,8 @@ declare(strict_types = 1);
 
 namespace Lingoda\LangfuseBundle\Tests\Unit\Tracing;
 
+use Lingoda\AiSdk\Decision\Answer;
+use Lingoda\AiSdk\Decision\DecisionResult;
 use Lingoda\AiSdk\Prompt\Conversation;
 use Lingoda\AiSdk\Prompt\Prompt;
 use Lingoda\AiSdk\Result\BinaryResult;
@@ -480,5 +482,89 @@ final class TraceManagerTest extends TestCase
         ;
 
         $this->traceManager->trace('timed-op', [], 'input', $callable);
+    }
+
+    public function testTraceWithStructuredRequestInput(): void
+    {
+        $traced = $this->captureTrace();
+
+        $this->traceManager->trace('typesafe-system-one', [], ['state' => 'text', 'questions' => ['q' => ['type' => 'noul']]], static fn () => new TextResult('ok'));
+
+        self::assertSame(['type' => 'request', 'content' => ['state' => 'text', 'questions' => ['q' => ['type' => 'noul']]]], $traced->data['input']);
+    }
+
+    public function testTraceWithDecisionResult(): void
+    {
+        $traced = $this->captureTrace();
+        $result = (new DecisionResult([
+            'refund' => Answer::fromArray('refund', ['type' => 'noul', 'noul' => 0.98]),
+            'topic' => Answer::fromArray('topic', ['type' => 'choice', 'choice' => 'refund', 'probabilities' => ['refund' => 0.94, 'other' => 0.06], 'confidence' => 0.92]),
+            'mood' => Answer::fromArray('mood', ['type' => 'score', 'score' => 1.97, 'probabilities' => [0.0, 0.03, 0.97], 'legend' => ['calm', 'unhappy', 'angry'], 'confidence' => 0.97]),
+        ], ['model' => 'jev-1.13.0']))->withUsage(new Usage(565, 0, 565));
+
+        $this->traceManager->trace('typesafe-system-one', [], ['state' => 'text'], static fn () => $result);
+
+        self::assertSame([
+            'type' => 'decision',
+            'answers' => [
+                'refund' => ['type' => 'noul', 'probability' => 0.98],
+                'topic' => ['type' => 'choice', 'choice' => 'refund', 'probabilities' => ['refund' => 0.94, 'other' => 0.06], 'confidence' => 0.92],
+                'mood' => ['type' => 'score', 'score' => 1.97, 'legend' => ['calm', 'unhappy', 'angry'], 'probabilities' => [0.0, 0.03, 0.97], 'confidence' => 0.97],
+            ],
+        ], $traced->data['output']);
+        self::assertSame('jev-1.13.0', $traced->data['metadata']['model']);
+        self::assertSame(565, $traced->usage?->promptTokens);
+    }
+
+    public function testTraceWithoutContentKeepsOnlyNonContentFields(): void
+    {
+        $traced = $this->captureTrace();
+        $result = (new TextResult('LNG-4711', ['model' => 'eu.amazon.nova-2-lite-v1:0']))->withUsage(new Usage(900, 5, 905));
+
+        $this->traceManager->trace('mnr-voucher', ['provider' => 'AWS Bedrock'], 'Voucher for Jane Doe', static fn () => $result, false);
+
+        self::assertSame(['type' => 'redacted'], $traced->data['input']);
+        self::assertArrayNotHasKey('output', $traced->data);
+        self::assertSame('eu.amazon.nova-2-lite-v1:0', $traced->data['metadata']['model']);
+        self::assertSame(905, $traced->data['usage']['total_tokens'] ?? null);
+        self::assertSame('success', $traced->data['status']);
+    }
+
+    public function testTraceWithoutContentRecordsOnlyTheExceptionClass(): void
+    {
+        $traced = $this->captureTrace();
+
+        try {
+            $this->traceManager->trace('mnr-voucher', [], 'Voucher for Jane Doe', static fn () => throw new \RuntimeException('Invalid field "Jane Doe"'), false);
+        } catch (\RuntimeException) {
+        }
+
+        self::assertSame(\RuntimeException::class, $traced->data['error']);
+        self::assertSame(['type' => 'redacted'], $traced->data['input']);
+    }
+
+    public function testBinaryResultSizeIsInBytes(): void
+    {
+        $traced = $this->captureTrace();
+
+        $this->traceManager->trace('text-to-speech', [], 'x', static fn () => new BinaryResult("\u{00E9}\u{00FC}", 'audio/mpeg'));
+
+        self::assertSame(4, $traced->data['output']['size'] ?? null);
+    }
+
+    /**
+     * Records what reaches the flusher.
+     */
+    private function captureTrace(): \stdClass
+    {
+        $traced = new \stdClass();
+        $traced->data = [];
+        $traced->usage = null;
+        $this->mockFlusher->method('flush')->willReturnCallback(static function (array $data, ?Usage $usage) use ($traced): void {
+            $traced->data = $data;
+            $traced->usage = $usage;
+        });
+
+        return $traced;
     }
 }

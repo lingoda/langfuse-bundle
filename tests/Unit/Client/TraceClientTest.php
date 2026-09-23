@@ -484,4 +484,51 @@ final class TraceClientTest extends TestCase
 
         $this->traceClient->updateTrace($traceId, $updateData);
     }
+
+    public function testCreateOrFailPassesEnvironmentAndStringTags(): void
+    {
+        $trace = $this->createMock(Trace::class);
+        $this->mockClient->expects(self::once())
+            ->method('trace')
+            ->with(
+                name: 'ai-completion',
+                userId: null,
+                sessionId: null,
+                metadata: ['model' => 'gpt-4o', '0' => 'numeric key'],
+                tags: ['prod', 'async'],
+                version: null,
+                release: null,
+                input: ['type' => 'string'],
+                output: null,
+                environment: 'prod',
+            )
+            ->willReturn($trace)
+        ;
+
+        self::assertSame($trace, $this->traceClient->createOrFail([
+            'name' => 'ai-completion',
+            'metadata' => ['model' => 'gpt-4o', 0 => 'numeric key'],
+            'tags' => ['prod', 42, 'async'],
+            'input' => ['type' => 'string'],
+            'environment' => 'prod',
+        ]));
+    }
+
+    public function testCreateOrFailThrows(): void
+    {
+        $this->mockClient->method('trace')->willThrowException(new \RuntimeException('Langfuse unreachable'));
+
+        $this->expectException(\RuntimeException::class);
+
+        $this->traceClient->createOrFail(['name' => 'ai-completion']);
+    }
+
+    public function testFlushOrFailThrows(): void
+    {
+        $this->mockClient->method('flush')->willThrowException(new \RuntimeException('Langfuse unreachable'));
+
+        $this->expectException(\RuntimeException::class);
+
+        $this->traceClient->flushOrFail();
+    }
 }

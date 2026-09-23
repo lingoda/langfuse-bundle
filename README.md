@@ -13,10 +13,10 @@ A Symfony bundle for integrating with Langfuse, providing AI operation tracing, 
 
 ## Requirements
 
-- PHP 8.3 or higher
-- Symfony 6.4 or 7.0+
-- Lingoda AI Bundle 1.2+ (the bundle decorates the Lingoda AI SDK)
-- Dropsolid Langfuse PHP SDK 1.2+
+- PHP 8.4 or higher
+- Symfony 7.4 or 8.0+
+- Lingoda AI Bundle 2.0+ and Lingoda AI SDK 2.1+ (the bundle decorates the SDK's platforms)
+- Dropsolid Langfuse PHP SDK 1.3.1+
 
 ## Installation
 
@@ -108,6 +108,31 @@ class ContentService
 - **Proper Langfuse generation structure for cost tracking**
 - Error handling and status tracking
 
+Every platform an app can inject is traced: the main `PlatformInterface`, and the single-provider platforms ai-bundle registers (`$openaiPlatform`, `$bedrockPlatform`, ...). Attachments appear in the input as `{mime, size}` only; their bytes and filenames never reach Langfuse.
+
+#### Keeping personal data out of Langfuse
+
+Pass `trace_content: false` to keep a call's content out of Langfuse:
+
+```php
+$result = $this->platform->ask($conversation, 'amazon.nova-2-lite-v1:0', ['trace_content' => false]);
+```
+
+The trace still records the name, model, provider, usage, duration and status. The input is recorded as `{type: redacted}`, there is no output, and an error is recorded as its exception class only (provider errors can quote the input). Nothing sensitive reaches the Messenger message or the failure transport either.
+
+#### Linking generations to Langfuse prompts
+
+```php
+$conversation = $this->prompts->getCompiled('mnr-voucher-fields', $parameters, version: 1);
+$result = $this->platform->ask($conversation, $model, ['langfuse_prompt' => $this->prompts->reference('mnr-voucher-fields', 1)]);
+```
+
+`PromptRegistryInterface::reference()` resolves the actual version (also for a label or the latest), and the generation is linked to that prompt version in Langfuse. `trace_name`, `trace_content` and `langfuse_prompt` are removed before the call reaches the provider.
+
+### Decision Tracing (TypeSafe Jev)
+
+When ai-bundle registers TypeSafe Jev (`providers.typesafe`), `DecisionPlatformInterface::decide()` is traced the way Langfuse's own [TypeSafe integration](https://langfuse.com/integrations/model-providers/typesafe) records it: a generation named `typesafe-system-one`, the model TypeSafe answered with (e.g. `jev-1.13.0` for `jev-latest`), the request `{state, model, questions}` as input, the typed answers with their probabilities as output, and the input tokens as usage. [Jev as a judge](https://langfuse.com/docs/evaluation/evaluation-methods/jev-as-a-judge) evaluators run inside Langfuse on these traces and need nothing from this bundle.
+
 ### Usage Metrics and Cost Tracking
 
 The bundle automatically extracts and sends usage metrics in the proper format for Langfuse:
@@ -115,6 +140,7 @@ The bundle automatically extracts and sends usage metrics in the proper format f
 - **Prompt tokens**: Input token count
 - **Completion tokens**: Output token count
 - **Total tokens**: Combined count
+- **Cached and reasoning tokens**: when the provider reports them, as `prompt_tokens_details.cached_tokens` and `completion_tokens_details.reasoning_tokens`
 - **Model information**: For accurate cost calculation
 - **Proper generation structure**: Trace → Generation hierarchy
 

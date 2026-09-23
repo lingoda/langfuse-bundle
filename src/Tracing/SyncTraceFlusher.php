@@ -25,107 +25,105 @@ final readonly class SyncTraceFlusher implements TraceFlusherInterface
     }
 
     /**
-     * Flush trace data to Langfuse synchronously.
+     * Sends the trace and swallows any failure: tracing must never break the application.
      *
-     * @param TraceData $traceData Trace details including name, metadata, input, output, error, status
+     * @param TraceData $traceData
      */
     public function flush(array $traceData, ?Usage $usage = null): void
     {
         try {
-            // Create a trace
-            $trace = $this->traceClient->trace($traceData);
-
-            if ($trace === null) {
-                $this->logger->warning('Failed to create trace', [
-                    'trace_name' => $traceData['name'] ?? 'unknown',
-                ]);
-                return;
-            }
-
-            // Check if this is an AI generation (has model in metadata)
-            if (isset($traceData['metadata']['model']) && is_string($traceData['metadata']['model'])) {
-                // Create a generation within the trace for AI operations
-                $generation = $trace->createGeneration(
-                    name: $traceData['name'] ?? 'ai-completion',
-                    model: $traceData['metadata']['model'],
-                    modelParameters: isset($traceData['metadata']['temperature'])
-                        ? ['temperature' => $traceData['metadata']['temperature']]
-                        : null,
-                    metadata: $traceData['metadata'] ?? null,
-                    input: $traceData['input'] ?? null
-                );
-
-                // Set usage details if available
-                if ($usage !== null) {
-                    $usageDetails = [
-                        'prompt_tokens' => $usage->promptTokens,
-                        'completion_tokens' => $usage->completionTokens,
-                        'total_tokens' => $usage->totalTokens,
-                    ];
-
-                    // Filter out zero/null values
-                    $usageDetails = array_filter($usageDetails, static fn ($v) => $v > 0);
-
-                    if (!empty($usageDetails)) {
-                        $generation->withUsageDetails($usageDetails);
-                    }
-                }
-
-                // End the generation with output
-                $endData = [];
-
-                if (isset($traceData['output'])) {
-                    $endData['output'] = $traceData['output'];
-                }
-
-                if (isset($traceData['error'])) {
-                    $endData['error'] = $traceData['error'];
-                    $endData['level'] = 'ERROR';
-                }
-
-                if (!empty($endData)) {
-                    $generation->end($endData);
-                    $this->logger->debug('Generation ended successfully', [
-                        'model' => $traceData['metadata']['model'],
-                        'usage' => $usageDetails ?? null,
-                    ]);
-                }
-            }
-
-            // End the trace
-            $traceEndData = [];
-
-            if (isset($traceData['output']) && !isset($traceData['metadata']['model'])) {
-                // Only set output on trace if it's not an AI generation
-                $traceEndData['output'] = $traceData['output'];
-            }
-
-            if (isset($traceData['error'])) {
-                $traceEndData['error'] = $traceData['error'];
-                $traceEndData['level'] = 'ERROR';
-            }
-
-            if (isset($traceData['status'])) {
-                $traceEndData['status'] = $traceData['status'];
-            }
-
-            $trace->end($traceEndData);
-
-            // Flush to Langfuse
-            $this->traceClient->flush();
-
-            $this->logger->debug('Trace flushed synchronously to Langfuse', [
-                'trace_name' => $traceData['name'] ?? 'unknown',
-                'status' => $traceData['status'] ?? 'unknown',
-                'has_generation' => isset($traceData['metadata']['model']),
-                'has_usage' => $usage !== null,
-            ]);
+            $this->send($traceData, $usage);
         } catch (\Throwable $e) {
             $this->logger->error('Failed to flush trace to Langfuse', [
                 'error' => $e->getMessage(),
-                'trace_name' => $traceData['name'] ?? 'unknown',
+                'trace_name' => $traceData['name'],
             ]);
-            // Silently fail - tracing should not break the application
         }
+    }
+
+    /**
+     * Sends the trace and throws when it cannot, so the async handler can hand the message back for a retry.
+     *
+     * @param TraceData $traceData
+     *
+     * @throws \Throwable
+     */
+    public function send(array $traceData, ?Usage $usage = null): void
+    {
+        $trace = $this->traceClient->createOrFail($traceData);
+        $model = $traceData['metadata']['model'] ?? null;
+        $error = $traceData['error'] ?? null;
+
+        // A result with a model is an AI generation: it carries the output, usage and prompt link
+        if (is_string($model)) {
+            $generation = $trace->createGeneration(
+                name: $traceData['name'],
+                model: $model,
+                modelParameters: isset($traceData['metadata']['temperature']) ? ['temperature' => $traceData['metadata']['temperature']] : null,
+                metadata: $traceData['metadata'],
+                input: $traceData['input'],
+            );
+
+            $prompt = $traceData['metadata']['langfuse_prompt'] ?? null;
+            if (is_array($prompt) && is_string($prompt['name'] ?? null) && is_int($prompt['version'] ?? null)) {
+                $generation->withPrompt($prompt['name'], $prompt['version']);
+            }
+
+            $usageDetails = $usage !== null ? self::usageDetails($usage) : null;
+            if ($usageDetails !== null) {
+                $generation->withUsageDetails($usageDetails);
+            }
+
+            if ($error !== null) {
+                $generation->withLevel('ERROR')->withStatusMessage($error);
+            }
+
+            $generation->end(isset($traceData['output']) ? ['output' => $traceData['output']] : null);
+        }
+
+        $traceEnd = ['metadata' => ['status' => $traceData['status']] + ($error !== null ? ['error' => $error] : [])];
+        if ($model === null && isset($traceData['output'])) {
+            $traceEnd['output'] = $traceData['output'];
+        }
+        $trace->end($traceEnd);
+
+        $this->traceClient->flushOrFail();
+
+        $this->logger->debug('Trace flushed to Langfuse', [
+            'trace_name' => $traceData['name'],
+            'status' => $traceData['status'],
+            'has_generation' => is_string($model),
+            'has_usage' => $usage !== null,
+        ]);
+    }
+
+    /**
+     * The OpenAI usage shape, which Langfuse accepts with nested cached and reasoning token counts.
+     *
+     * @return array<string, int|array<string, int>>|null
+     */
+    private static function usageDetails(Usage $usage): ?array
+    {
+        if ($usage->promptTokens <= 0 && $usage->completionTokens <= 0 && $usage->totalTokens <= 0) {
+            return null;
+        }
+
+        $details = [
+            'prompt_tokens' => max(0, $usage->promptTokens),
+            'completion_tokens' => max(0, $usage->completionTokens),
+            'total_tokens' => max(0, $usage->totalTokens),
+        ];
+
+        $cached = $usage->cachedTokens ?? $usage->promptDetails?->cachedTokens;
+        if ($cached !== null) {
+            $details['prompt_tokens_details'] = ['cached_tokens' => max(0, $cached)];
+        }
+
+        $reasoning = $usage->reasoningTokens ?? $usage->completionDetails?->reasoningTokens;
+        if ($reasoning !== null) {
+            $details['completion_tokens_details'] = ['reasoning_tokens' => max(0, $reasoning)];
+        }
+
+        return $details;
     }
 }

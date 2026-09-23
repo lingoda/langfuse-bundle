@@ -6,6 +6,7 @@ namespace Symfony\Component\DependencyInjection\Loader\Configurator;
 
 use Dropsolid\LangFuse\Client;
 use Dropsolid\LangFuse\DTO\ClientConfig;
+use Lingoda\AiSdk\Decision\DecisionPlatformInterface;
 use Lingoda\AiSdk\PlatformInterface;
 use Lingoda\LangfuseBundle\Cache\PromptCache;
 use Lingoda\LangfuseBundle\Client\PromptClient;
@@ -15,6 +16,7 @@ use Lingoda\LangfuseBundle\Command\TestConnectionCommand;
 use Lingoda\LangfuseBundle\Deserialization\PromptDeserializer;
 use Lingoda\LangfuseBundle\Message\FlushLangfuseTraceHandler;
 use Lingoda\LangfuseBundle\Naming\PromptIdentifier;
+use Lingoda\LangfuseBundle\Platform\DecisionPlatformDecorator;
 use Lingoda\LangfuseBundle\Platform\LangfusePlatformDecorator;
 use Lingoda\LangfuseBundle\Prompt\PromptRegistry;
 use Lingoda\LangfuseBundle\Prompt\PromptRegistryInterface;
@@ -24,6 +26,7 @@ use Lingoda\LangfuseBundle\Tracing\SyncTraceFlusher;
 use Lingoda\LangfuseBundle\Tracing\TraceFlusherInterface;
 use Lingoda\LangfuseBundle\Tracing\TraceManager;
 use Lingoda\LangfuseBundle\Tracing\TraceManagerInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 return static function (ContainerConfigurator $container): void {
     $services = $container->services()
@@ -92,18 +95,29 @@ return static function (ContainerConfigurator $container): void {
 
     // === Async Message Handler ===
 
+    // Tagged instead of #[AsMessageHandler], so apps without symfony/messenger can boot the bundle
     $services->set(FlushLangfuseTraceHandler::class)
         ->args([
             service(SyncTraceFlusher::class),
             service('logger')->nullOnInvalid(),
         ])
         ->tag('monolog.logger', ['channel' => 'langfuse'])
+        ->tag('messenger.message_handler')
     ;
 
     // === Platform Decorator (Main Integration Point) ===
 
     $services->set(LangfusePlatformDecorator::class)
         ->decorate(PlatformInterface::class, null, 1)
+        ->args([
+            service('.inner'),
+            service(TraceManagerInterface::class),
+        ])
+    ;
+
+    // Decisions (TypeSafe Jev): ai-bundle registers the platform only when providers.typesafe has an api_key
+    $services->set(DecisionPlatformDecorator::class)
+        ->decorate(DecisionPlatformInterface::class, null, 1, ContainerInterface::IGNORE_ON_INVALID_REFERENCE)
         ->args([
             service('.inner'),
             service(TraceManagerInterface::class),

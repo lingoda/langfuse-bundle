@@ -19,6 +19,7 @@ use Lingoda\AiSdk\Result\BinaryResult;
 use Lingoda\AiSdk\Result\ResultInterface;
 use Lingoda\AiSdk\Result\StreamResult;
 use Lingoda\AiSdk\Result\TextResult;
+use Lingoda\LangfuseBundle\Prompt\PromptReference;
 use Lingoda\LangfuseBundle\Tracing\TraceManagerInterface;
 use Webmozart\Assert\Assert;
 
@@ -46,13 +47,26 @@ final readonly class LangfusePlatformDecorator implements PlatformInterface
 
         $traceName = $options['trace_name'] ?? 'ai-completion';
         Assert::string($traceName);
-        unset($options['trace_name']);
+
+        // false keeps model, usage, duration and status but no input, output or error text (e.g. for personal data)
+        $recordContent = $options['trace_content'] ?? true;
+        Assert::boolean($recordContent);
+
+        $prompt = $options['langfuse_prompt'] ?? null;
+        if ($prompt !== null) {
+            Assert::isInstanceOf($prompt, PromptReference::class);
+            $metadata['langfuse_prompt'] = ['name' => $prompt->name, 'version' => $prompt->version];
+        }
+
+        // Tracing options never reach the provider
+        unset($options['trace_name'], $options['trace_content'], $options['langfuse_prompt']);
 
         return $this->traceManager->trace(
             $traceName,
             $metadata,
             $input,
-            fn () => $this->decorated->ask($input, $modelId, $options)
+            fn () => $this->decorated->ask($input, $modelId, $options),
+            $recordContent
         );
     }
 
