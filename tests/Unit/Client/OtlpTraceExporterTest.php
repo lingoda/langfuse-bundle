@@ -113,6 +113,16 @@ final class OtlpTraceExporterTest extends TestCase
         self::assertSame(['stringValue' => '{"a":true}'], $attributes['langfuse.observation.metadata.nested']);
     }
 
+    public function testFailedGenerationWithoutUsageIsNotBilledOnItsInput(): void
+    {
+        $traceData = $this->traceData(['status' => 'error', 'error' => 'Failed to acquire the lock', 'metadata' => ['model' => 'gpt-4.1-nano']]);
+        unset($traceData['output']);
+
+        $attributes = $this->attributes($this->span($traceData));
+
+        self::assertSame(['input' => 0, 'output' => 0, 'total' => 0], json_decode($attributes['langfuse.observation.usage_details']['stringValue'], true));
+    }
+
     public function testRedactedTraceSendsNoContent(): void
     {
         $traceData = $this->traceData(['input' => ['type' => 'redacted'], 'metadata' => ['model' => 'eu.amazon.nova-2-lite-v1:0']]);

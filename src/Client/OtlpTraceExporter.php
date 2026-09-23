@@ -107,6 +107,10 @@ final readonly class OtlpTraceExporter
         }
 
         $usageDetails = $usage !== null ? self::usageDetails($usage) : null;
+        if ($usageDetails === null && $model !== null && $error !== null) {
+            // A failed call never reached the model: without usage Langfuse would count the input and bill it
+            $usageDetails = ['input' => 0, 'output' => 0, 'total' => 0];
+        }
         if ($usageDetails !== null) {
             $attributes['langfuse.observation.usage_details'] = self::json($usageDetails);
         }
