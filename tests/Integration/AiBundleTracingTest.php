@@ -5,6 +5,7 @@ declare(strict_types = 1);
 namespace Lingoda\LangfuseBundle\Tests\Integration;
 
 use Lingoda\AiBundle\LingodaAiBundle;
+use Lingoda\LangfuseBundle\Client\OtlpTraceExporter;
 use Lingoda\LangfuseBundle\LingodaLangfuseBundle;
 use Lingoda\LangfuseBundle\Platform\DecisionPlatformDecorator;
 use Lingoda\LangfuseBundle\Platform\LangfusePlatformDecorator;
@@ -48,10 +49,14 @@ final class AiBundleTracingTest extends KernelTestCase
 
     public function testWithoutTypeSafeTheDecisionDecoratorIsDropped(): void
     {
-        // Also the minimal langfuse config: no tracing and no prompts block
+        // Also a langfuse config without a prompts block
         self::bootKernel(['config' => static fn (TestKernel $kernel) => $kernel->addTestConfig(__DIR__ . '/config/ai_bundle_without_typesafe_test.yaml')]);
 
         self::assertInstanceOf(LangfusePlatformDecorator::class, self::getContainer()->get('app.platform'));
         self::assertFalse(self::getContainer()->has(DecisionPlatformDecorator::class));
+
+        $exporter = self::getContainer()->get('app.trace_exporter');
+        self::assertInstanceOf(OtlpTraceExporter::class, $exporter);
+        self::assertSame(7, (new \ReflectionProperty(OtlpTraceExporter::class, 'timeout'))->getValue($exporter));
     }
 }

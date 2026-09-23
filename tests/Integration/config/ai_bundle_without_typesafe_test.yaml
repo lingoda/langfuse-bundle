@@ -7,6 +7,9 @@ services:
     app.platform:
         alias: Lingoda\AiSdk\PlatformInterface
         public: true
+    app.trace_exporter:
+        alias: Lingoda\LangfuseBundle\Client\OtlpTraceExporter
+        public: true
 
 lingoda_ai:
     providers:
@@ -22,3 +25,5 @@ lingoda_langfuse:
     connection:
         public_key: 'pk-test'
         secret_key: 'sk-test'
+    tracing:
+        export_timeout: 7
