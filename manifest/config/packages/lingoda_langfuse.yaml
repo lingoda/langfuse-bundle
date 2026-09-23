@@ -4,18 +4,17 @@ lingoda_langfuse:
         public_key: '%env(LANGFUSE_PUBLIC_KEY)%'
         secret_key: '%env(LANGFUSE_SECRET_KEY)%'
         host: '%env(default:default_langfuse_host:LANGFUSE_HOST)%'
-        timeout: 30
-        retry:
-            max_attempts: 3
-            delay: 1000
+        timeout: 30 # prompt API requests
 
     tracing:
         enabled: true
         sampling_rate: 1.0
+        # Seconds a trace export may take; synchronous tracing blocks the traced call at most this long
+        export_timeout: 3
         # Async flushing requires symfony/messenger
 #        async_flush:
 #            enabled: false
-#            message_bus: 'messenger.bus.default'
+#            message_bus: 'messenger.default_bus'
 
     prompts:
         # Caching disabled by default (uncomment to enable)

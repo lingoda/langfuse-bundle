@@ -43,17 +43,15 @@ lingoda_langfuse:
         public_key: '%env(LANGFUSE_PUBLIC_KEY)%'
         secret_key: '%env(LANGFUSE_SECRET_KEY)%'
         host: '%env(default:LANGFUSE_HOST:https://cloud.langfuse.com)%'
-        timeout: 30
-        retry:
-            max_attempts: 3
-            delay: 1000
+        timeout: 30 # prompt API requests
 
     tracing:
         enabled: true
         sampling_rate: 1.0
+        export_timeout: 3
         async_flush:
             enabled: false
-            message_bus: 'messenger.bus.default'
+            message_bus: 'messenger.default_bus'
 
     prompts:
         caching:
@@ -190,7 +188,7 @@ lingoda_langfuse:
         sampling_rate: 1.0
         async_flush:
             enabled: true
-            message_bus: 'messenger.bus.default'  # optional, defaults to messenger.bus.default
+            message_bus: 'messenger.default_bus'  # optional, defaults to messenger.default_bus
 ```
 
 #### 3. Run Message Consumers
@@ -315,10 +313,10 @@ lingoda_langfuse:
         public_key: string              # Required: Langfuse public key
         secret_key: string              # Required: Langfuse secret key
         host: string                    # Default: https://cloud.langfuse.com
-        timeout: int                    # Default: 30 (seconds)
-        retry:
-            max_attempts: int           # Default: 3
-            delay: int                  # Default: 1000 (milliseconds)
+        timeout: int                    # Default: 30 (seconds, prompt API requests)
+        retry:                          # Deprecated since 2.0 and ignored (traces use tracing.export_timeout)
+            max_attempts: int
+            delay: int
 
     # Tracing configuration
     tracing:
