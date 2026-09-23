@@ -74,3 +74,22 @@ jobs:
               fail_ci_if_error: true
               token: ${{ secrets.CODECOV_TOKEN }}
               files: /tmp/coverage/full.xml
+
+  tests-without-messenger:
+    runs-on: ubuntu-latest
+    steps:
+      -   name: checkout
+          uses: actions/checkout@v4
+
+      -   name: Setup PHP
+          uses: shivammathur/setup-php@2.30.4
+          with:
+              php-version: '8.4'
+
+      -   name: Install without symfony/messenger
+          run: |
+            composer remove --dev --no-update symfony/messenger
+            composer update --prefer-dist --no-scripts --no-interaction
+
+      -   name: Run tests except the Messenger group (the bundle must boot without it)
+          run: vendor/bin/phpunit --exclude-group messenger

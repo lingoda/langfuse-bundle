@@ -505,4 +505,36 @@ final class LangfusePlatformDecoratorTest extends TestCase
 
         $this->decorator->ask('hello', null, ['langfuse_prompt' => ['name' => 'x', 'version' => 1]]);
     }
+
+    public function testSessionAndUserIdsAreRecordedAndStripped(): void
+    {
+        $mockModel = $this->createMock(ModelInterface::class);
+        $mockModel->method('getId')->willReturn('resolved-model');
+        $mockModel->method('getProvider')->willReturn($this->createMock(ProviderInterface::class));
+        $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
+
+        $this->mockTraceManager
+            ->expects(self::once())
+            ->method('trace')
+            ->with(
+                'ai-completion',
+                self::callback(static fn (array $metadata): bool => $metadata['langfuse_session_id'] === 'run-42' && $metadata['langfuse_user_id'] === 'cron'),
+            )
+            ->willReturnCallback(fn ($name, $metadata, $input, $callable) => $callable())
+        ;
+        $this->mockPlatform->expects(self::once())->method('ask')->with('hello', null, [])->willReturn($this->createMock(TextResult::class));
+
+        $this->decorator->ask('hello', null, ['langfuse_session_id' => 'run-42', 'langfuse_user_id' => 'cron']);
+    }
+
+    public function testEmptySessionIdIsRejected(): void
+    {
+        $mockModel = $this->createMock(ModelInterface::class);
+        $mockModel->method('getProvider')->willReturn($this->createMock(ProviderInterface::class));
+        $this->mockPlatform->method('resolveModel')->willReturn($mockModel);
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->decorator->ask('hello', null, ['langfuse_session_id' => '']);
+    }
 }

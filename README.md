@@ -127,7 +127,20 @@ $conversation = $this->prompts->getCompiled('mnr-voucher-fields', $parameters, v
 $result = $this->platform->ask($conversation, $model, ['langfuse_prompt' => $this->prompts->reference('mnr-voucher-fields', 1)]);
 ```
 
-`PromptRegistryInterface::reference()` resolves the actual version (also for a label or the latest), and the generation is linked to that prompt version in Langfuse. `trace_name`, `trace_content` and `langfuse_prompt` are removed before the call reaches the provider.
+`PromptRegistryInterface::reference()` resolves the actual version (also for a label or the latest), and the generation is linked to that prompt version in Langfuse.
+
+#### Sessions and users
+
+```php
+$result = $this->platform->ask($conversation, $model, ['langfuse_session_id' => $runId, 'langfuse_user_id' => 'reporting-cron']);
+```
+
+Groups traces into a Langfuse session and attributes them to a user, so session cost and filters work. Pass ids, never names or e-mail addresses. `trace_name`, `trace_content`, `langfuse_prompt`, `langfuse_session_id` and `langfuse_user_id` are removed before the call reaches the provider.
+
+#### What a trace measures
+
+- The duration covers the whole traced call, including any wait for ai-bundle's rate limiter: it is the latency the caller saw, not only the provider's response time.
+- A trace that exceeds Langfuse's request size limit (a very long conversation) is rejected with HTTP 413; the async handler sends it to the failure transport without retrying, and the synchronous flusher logs and drops it. Keep huge documents in attachments, which are recorded as `{mime, size}` only.
 
 ### Decision Tracing (TypeSafe Jev)
 
@@ -311,6 +324,7 @@ lingoda_langfuse:
     tracing:
         enabled: bool                   # Default: true
         sampling_rate: float            # Default: 1.0 (0.0-1.0)
+        export_timeout: int             # Default: 3 (seconds per trace; synchronous tracing blocks the call this long at most)
         async_flush:
             enabled: bool               # Default: false
             message_bus: string         # Default: 'messenger.default_bus'

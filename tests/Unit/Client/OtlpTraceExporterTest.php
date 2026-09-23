@@ -32,7 +32,7 @@ final class OtlpTraceExporterTest extends TestCase
             return new MockResponse('{}', ['http_code' => 200]);
         });
 
-        (new OtlpTraceExporter($this->connection, $httpClient))->export($this->traceData());
+        (new OtlpTraceExporter($this->connection, $httpClient, 5))->export($this->traceData());
 
         [$method, $url, $options] = $captured;
         self::assertSame('POST', $method);
@@ -40,7 +40,9 @@ final class OtlpTraceExporterTest extends TestCase
         self::assertContains('Authorization: Basic cGstdGVzdDpzay10ZXN0', $options['headers']);
         self::assertContains('x-langfuse-ingestion-version: 4', $options['headers']);
         self::assertContains('Content-Type: application/json', $options['headers']);
-        self::assertSame(7.0, (float) $options['timeout']);
+        // Its own short timeout, not the connection's (7s): synchronous tracing blocks the traced call
+        self::assertSame(5.0, (float) $options['timeout']);
+        self::assertSame(5.0, (float) $options['max_duration']);
 
         $body = json_decode($options['body'], true, 512, JSON_THROW_ON_ERROR);
         self::assertCount(1, $body['resourceSpans'][0]['scopeSpans'][0]['spans']);
@@ -209,5 +211,25 @@ final class OtlpTraceExporterTest extends TestCase
 
         self::assertSame(str_repeat('ab', 16), $span['traceId']);
         self::assertSame(str_repeat('cd', 8), $span['spanId']);
+    }
+
+    public function testSessionAndUserIdsBecomeLangfuseAttributes(): void
+    {
+        $attributes = $this->attributes($this->span($this->traceData(['metadata' => [
+            'langfuse_session_id' => 'voucher-run-42',
+            'langfuse_user_id' => 'reporting-cron',
+        ]])));
+
+        self::assertSame(['stringValue' => 'voucher-run-42'], $attributes['langfuse.session.id']);
+        self::assertSame(['stringValue' => 'reporting-cron'], $attributes['langfuse.user.id']);
+        self::assertArrayNotHasKey('langfuse.observation.metadata.langfuse_session_id', $attributes);
+        self::assertArrayNotHasKey('langfuse.observation.metadata.langfuse_user_id', $attributes);
+    }
+
+    public function testEmptySessionIdIsNotSent(): void
+    {
+        $attributes = $this->attributes($this->span($this->traceData(['metadata' => ['langfuse_session_id' => '']])));
+
+        self::assertArrayNotHasKey('langfuse.session.id', $attributes);
     }
 }

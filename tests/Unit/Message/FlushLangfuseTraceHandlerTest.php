@@ -10,6 +10,7 @@ use Lingoda\LangfuseBundle\Message\FlushLangfuseTrace;
 use Lingoda\LangfuseBundle\Message\FlushLangfuseTraceHandler;
 use Lingoda\LangfuseBundle\Tracing\SyncTraceFlusher;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -338,6 +339,7 @@ final class FlushLangfuseTraceHandlerTest extends TestCase
     }
 
     #[DataProvider('rejectedStatuses')]
+    #[Group('messenger')]
     public function testRejectedTraceIsNotRetried(int $status): void
     {
         $rejection = new LangfuseException('Langfuse trace export failed', $status);

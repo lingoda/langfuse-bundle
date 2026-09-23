@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `ask()` option `trace_content: false`: records name, model, provider, usage, duration and status, but no input, output or error text.
 - `ask()` option `langfuse_prompt` with `PromptRegistryInterface::reference()` (`PromptReference`): links the generation to the Langfuse prompt version.
 - Cached and reasoning token counts are sent with the usage.
+- `ask()` options `langfuse_session_id` and `langfuse_user_id`: group traces into a Langfuse session and attribute them to a user.
+- `tracing.export_timeout` (default 3 seconds): how long sending a trace may take, separate from `connection.timeout` (prompt API). Synchronous tracing blocks the traced call at most this long when Langfuse is slow or down; before, it could block for the full 30-second connection timeout.
 - Langfuse v4 ingestion: traces are sent as OpenTelemetry spans (OTLP/HTTP JSON) to `/api/public/otel/v1/traces` with `x-langfuse-ingestion-version: 4` (`OtlpTraceExporter`, `LangfuseConnection`). The legacy `/api/public/ingestion` endpoint, served only until November 16, 2026, is no longer used.
 - `SyncTraceFlusher::send()`, which throws instead of swallowing failures.
 

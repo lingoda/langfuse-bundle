@@ -32,9 +32,13 @@ final readonly class OtlpTraceExporter
 
     private HttpClientInterface $httpClient;
 
+    /**
+     * @param int $timeout Seconds to wait for Langfuse; short, since synchronous tracing blocks the traced call
+     */
     public function __construct(
         private LangfuseConnection $connection,
         ?HttpClientInterface $httpClient = null,
+        private int $timeout = 3,
     ) {
         $this->httpClient = $httpClient ?? HttpClient::create();
     }
@@ -54,7 +58,8 @@ final readonly class OtlpTraceExporter
                     'x-langfuse-ingestion-version' => '4',
                 ],
                 'json' => $this->payload($traceData, $usage),
-                'timeout' => $this->connection->timeout,
+                'timeout' => $this->timeout,
+                'max_duration' => $this->timeout,
             ]);
             $status = $response->getStatusCode();
             $body = $status >= 300 ? $response->getContent(false) : '';
@@ -104,6 +109,13 @@ final readonly class OtlpTraceExporter
         $usageDetails = $usage !== null ? self::usageDetails($usage) : null;
         if ($usageDetails !== null) {
             $attributes['langfuse.observation.usage_details'] = self::json($usageDetails);
+        }
+
+        foreach (['langfuse_session_id' => 'langfuse.session.id', 'langfuse_user_id' => 'langfuse.user.id'] as $key => $attribute) {
+            if (is_string($metadata[$key] ?? null) && $metadata[$key] !== '') {
+                $attributes[$attribute] = $metadata[$key];
+            }
+            unset($metadata[$key]);
         }
 
         $prompt = $metadata['langfuse_prompt'] ?? null;

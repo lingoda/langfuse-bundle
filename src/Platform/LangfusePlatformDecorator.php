@@ -60,8 +60,16 @@ final readonly class LangfusePlatformDecorator implements PlatformInterface
             $metadata['langfuse_prompt'] = ['name' => $prompt->name, 'version' => $prompt->version];
         }
 
+        // Group traces into a Langfuse session and attribute them to a user (ids only, never personal data)
+        foreach (['langfuse_session_id', 'langfuse_user_id'] as $key) {
+            if (isset($options[$key])) {
+                Assert::stringNotEmpty($options[$key]);
+                $metadata[$key] = $options[$key];
+            }
+        }
+
         // Tracing options never reach the provider
-        unset($options['trace_name'], $options['trace_content'], $options['langfuse_prompt']);
+        unset($options['trace_name'], $options['trace_content'], $options['langfuse_prompt'], $options['langfuse_session_id'], $options['langfuse_user_id']);
 
         return $this->traceManager->trace(
             $traceName,
