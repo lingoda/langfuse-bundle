@@ -90,7 +90,7 @@ final class CachePromptCommand extends Command
                         // Count as cached in dry-run mode
                     } else {
                         // This will fetch from API, cache it, and save to storage
-                        $promptDetails = $this->promptRegistry->getRawPrompt($name, useCache: false); // Skip cache to ensure fresh data
+                        $this->promptRegistry->getRawPrompt($name, useCache: false); // Skip cache to ensure fresh data
                         $io->text("  → Cached: {$name}");
                     }
                     $cached++;
