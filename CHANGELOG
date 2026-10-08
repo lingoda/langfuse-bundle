@@ -50,3 +50,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Apps without `symfony/messenger` can boot the bundle: the async handler is tagged `messenger.message_handler` instead of carrying `#[AsMessageHandler]`, whose missing class broke the container build. Enabling `tracing.async_flush` without Messenger fails with the `composer require` command.
 - Binary output size is counted in bytes, not characters.
 - Attachment metadata from ai-sdk 2 conversations fits the trace input type (PHPStan).
+
+## [2.0.1]
+
+### Fixed
+
+- Prompts are read from `GET /api/public/v2/prompts/{name}`. The v1 endpoint, `GET /api/public/prompts`, ignores the label and always returns the `production` version, so a request by label read the wrong version when the label was on another one.
+- A request with both a version and a label throws `InvalidArgumentException`, because Langfuse refuses it.
+- The prompt name is URL-encoded in the path, so a name with a folder (`folder/name`) works.

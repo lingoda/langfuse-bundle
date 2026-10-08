@@ -4,6 +4,7 @@ declare(strict_types = 1);
 
 namespace Lingoda\LangfuseBundle\Client;
 
+use InvalidArgumentException;
 use Lingoda\LangfuseBundle\Exception\LangfuseException;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
@@ -13,7 +14,8 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  */
 final class PromptClient
 {
-    private const string PROMPTS_ENDPOINT = 'api/public/prompts';
+    // The v1 endpoint, api/public/prompts, ignores the label and always returns the production version.
+    private const string PROMPTS_ENDPOINT = 'api/public/v2/prompts/';
 
     public function __construct(
         private readonly LangfuseConnection $connection,
@@ -25,16 +27,21 @@ final class PromptClient
      * Get a prompt from Langfuse API via HTTP.
      *
      * @param string $name Prompt name
-     * @param int|null $version Prompt version (null for latest)
-     * @param string|null $label Prompt label
+     * @param int|null $version Prompt version
+     * @param string|null $label Prompt label. Without a version and a label, Langfuse returns the production version.
      *
+     * @throws InvalidArgumentException when both a version and a label are given, which Langfuse refuses
      * @throws LangfuseException
      *
      * @return array<string, mixed> Prompt data
      */
     public function getPromptFromAPI(string $name, ?int $version = null, ?string $label = null): array
     {
-        $queryParams = ['name' => $name];
+        if ($version !== null && $label !== null) {
+            throw new InvalidArgumentException(sprintf('Prompt "%s": give a version or a label, not both.', $name));
+        }
+
+        $queryParams = [];
         if ($version !== null) {
             $queryParams['version'] = (string) $version;
         }
@@ -43,7 +50,7 @@ final class PromptClient
         }
 
         try {
-            return $this->makeGetRequest($queryParams);
+            return $this->makeGetRequest(self::PROMPTS_ENDPOINT . rawurlencode($name), $queryParams);
         } catch (LangfuseException $e) {
             if (str_contains($e->getMessage(), '404') || str_contains($e->getMessage(), 'not found')) {
                 throw new LangfuseException(sprintf('Prompt "%s" not found in Langfuse', $name), 404, $e);
@@ -61,14 +68,14 @@ final class PromptClient
      *
      * @return array<string, mixed> Response data
      */
-    private function makeGetRequest(array $queryParams = []): array
+    private function makeGetRequest(string $path, array $queryParams = []): array
     {
         if ($this->httpClient === null) {
             throw new LangfuseException('HTTP client not configured for prompt management');
         }
 
         try {
-            $response = $this->httpClient->request('GET', $this->connection->url(self::PROMPTS_ENDPOINT), [
+            $response = $this->httpClient->request('GET', $this->connection->url($path), [
                 'query' => $queryParams,
                 'headers' => [
                     'Authorization' => $this->connection->authorizationHeader(),
