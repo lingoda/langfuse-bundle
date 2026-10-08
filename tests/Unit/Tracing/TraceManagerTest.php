@@ -341,14 +341,6 @@ final class TraceManagerTest extends TestCase
     public function testTraceWithPartialSamplingRate(): void
     {
         // This test is probabilistic, so we test the boundaries
-        $halfSampledManager = new TraceManager(
-            $this->mockFlusher,
-            $this->clock,
-            environment: 'test',
-            enabled: true,
-            samplingRate: 0.5
-        );
-
         $result = new TextResult('test response');
         $callable = fn () => $result;
 

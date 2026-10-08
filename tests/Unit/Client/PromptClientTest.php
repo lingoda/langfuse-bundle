@@ -4,6 +4,7 @@ declare(strict_types = 1);
 
 namespace Lingoda\LangfuseBundle\Tests\Unit\Client;
 
+use InvalidArgumentException;
 use Lingoda\LangfuseBundle\Client\LangfuseConnection;
 use Lingoda\LangfuseBundle\Client\PromptClient;
 use Lingoda\LangfuseBundle\Exception\LangfuseException;
@@ -46,9 +47,9 @@ final class PromptClientTest extends TestCase
             ->method('request')
             ->with(
                 'GET',
-                'https://api.langfuse.com/api/public/prompts',
+                'https://api.langfuse.com/api/public/v2/prompts/test-prompt',
                 [
-                    'query' => ['name' => 'test-prompt'],
+                    'query' => [],
                     'headers' => [
                         'Authorization' => self::AUTHORIZATION,
                         'Content-Type' => 'application/json',
@@ -81,9 +82,8 @@ final class PromptClientTest extends TestCase
             ->method('request')
             ->with(
                 'GET',
-                'https://api.langfuse.com/api/public/prompts',
-                self::callback(fn ($options) => $options['query']['name'] === 'versioned-prompt' &&
-                           $options['query']['version'] === '2')
+                'https://api.langfuse.com/api/public/v2/prompts/versioned-prompt',
+                self::callback(fn ($options) => $options['query'] === ['version' => '2'])
             )
             ->willReturn($mockResponse)
         ;
@@ -109,10 +109,8 @@ final class PromptClientTest extends TestCase
             ->method('request')
             ->with(
                 'GET',
-                'https://api.langfuse.com/api/public/prompts',
-                self::callback(fn ($options) => $options['query']['name'] === 'labeled-prompt' &&
-                           $options['query']['label'] === 'production' &&
-                           !isset($options['query']['version']))
+                'https://api.langfuse.com/api/public/v2/prompts/labeled-prompt',
+                self::callback(fn ($options) => $options['query'] === ['label' => 'production'])
             )
             ->willReturn($mockResponse)
         ;
@@ -122,29 +120,28 @@ final class PromptClientTest extends TestCase
         self::assertEquals($promptData, $result);
     }
 
-    public function testGetPromptFromAPIWithAllParameters(): void
+    public function testGetPromptFromAPIRefusesAVersionAndALabel(): void
     {
-        $promptData = ['name' => 'full-prompt'];
+        $this->mockHttpClient->expects(self::never())->method('request');
 
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->promptClient->getPromptFromAPI('full-prompt', 3, 'staging');
+    }
+
+    public function testGetPromptFromAPIEncodesTheNameInThePath(): void
+    {
         $mockResponse = $this->createMock(ResponseInterface::class);
-        $mockResponse->method('getContent')->willReturn(json_encode($promptData));
+        $mockResponse->method('getContent')->willReturn(json_encode(['name' => 'folder/a prompt']));
 
         $this->mockHttpClient
             ->expects(self::once())
             ->method('request')
-            ->with(
-                'GET',
-                'https://api.langfuse.com/api/public/prompts',
-                self::callback(fn ($options) => $options['query']['name'] === 'full-prompt' &&
-                           $options['query']['version'] === '3' &&
-                           $options['query']['label'] === 'staging')
-            )
+            ->with('GET', 'https://api.langfuse.com/api/public/v2/prompts/folder%2Fa%20prompt', self::anything())
             ->willReturn($mockResponse)
         ;
 
-        $result = $this->promptClient->getPromptFromAPI('full-prompt', 3, 'staging');
-
-        self::assertEquals($promptData, $result);
+        $this->promptClient->getPromptFromAPI('folder/a prompt', label: 'production');
     }
 
     public function testGetPromptFromAPIHandles404(): void
@@ -257,7 +254,7 @@ final class PromptClientTest extends TestCase
             ->method('request')
             ->with(
                 'GET',
-                'https://api.langfuse.com/api/public/prompts',
+                'https://api.langfuse.com/api/public/v2/prompts/test',
                 self::anything()
             )
             ->willReturn($mockResponse)
@@ -280,7 +277,7 @@ final class PromptClientTest extends TestCase
             ->method('request')
             ->with(
                 'GET',
-                'https://api.langfuse.com/api/public/prompts',
+                'https://api.langfuse.com/api/public/v2/prompts/test',
                 self::anything()
             )
             ->willReturn($mockResponse)
